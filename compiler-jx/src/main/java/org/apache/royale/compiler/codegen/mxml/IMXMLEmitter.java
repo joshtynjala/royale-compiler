@@ -52,6 +52,7 @@ import org.apache.royale.compiler.tree.mxml.IMXMLUintNode;
 import org.apache.royale.compiler.tree.mxml.IMXMLVectorNode;
 import org.apache.royale.compiler.tree.mxml.IMXMLWebServiceNode;
 import org.apache.royale.compiler.tree.mxml.IMXMLWebServiceOperationNode;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.visitor.IASNodeStrategy;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 
@@ -68,6 +69,8 @@ public interface IMXMLEmitter extends IEmitter
     IBlockWalker getMXMLWalker();
 
     String postProcess(String output);
+
+    String postProcess(String output, ICompilationUnit cu);
     
     void setMXMLWalker(IBlockWalker mxmlBlockWalker);
 

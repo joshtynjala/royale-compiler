@@ -29,6 +29,7 @@ import org.apache.royale.compiler.projects.ICompilerProject;
 import org.apache.royale.compiler.tree.as.IASNode;
 import org.apache.royale.compiler.tree.as.IRegExpLiteralNode;
 import org.apache.royale.compiler.tree.mxml.*;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
 
@@ -42,6 +43,12 @@ public class MXMLEmitter extends Emitter implements IMXMLEmitter
 
     @Override
     public String postProcess(String output)
+    {
+    	return postProcess(output, null);
+    }
+
+    @Override
+    public String postProcess(String output, ICompilationUnit cu)
     {
         return output;
     }

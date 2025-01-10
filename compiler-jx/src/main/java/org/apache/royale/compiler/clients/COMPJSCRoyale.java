@@ -77,6 +77,7 @@ import org.apache.royale.compiler.targets.ITarget.TargetType;
 import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.units.ICompilationUnit.UnitType;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.utils.SourceMapUtils;
 import org.apache.royale.swc.ISWCFileEntry;
 import org.apache.royale.swc.io.SWCReader;
@@ -160,7 +161,14 @@ public class COMPJSCRoyale extends MXMLJSCRoyale
 
     public COMPJSCRoyale()
     {
-        IBackend backend = new MXMLRoyaleSWCBackend();
+        this(JSModuleType.GOOG);
+    }
+
+    public COMPJSCRoyale(JSModuleType jsModuleType)
+    {
+        this.jsModuleType = jsModuleType;
+        
+        IBackend backend = new MXMLRoyaleSWCBackend(jsModuleType);
 
         workspace = new Workspace();
         workspace.setASDocDelegate(new RoyaleASDocDelegate());
@@ -223,7 +231,25 @@ public class COMPJSCRoyale extends MXMLJSCRoyale
         boolean packingSWC = false;
         String outputFolderName = getOutputFilePath();
         File swcFile = new File(outputFolderName);
-        File jsOut = new File("js/out");
+        File jsOut = null;
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                jsOut = new File("js/out");
+                break;
+            }
+            case ESM:
+            {
+                jsOut = new File("js/esm-out");
+                break;
+            }
+            case COMMONJS:
+            {
+                jsOut = new File("js/cjs-out");
+                break;
+            }
+        }
         File externsOut = new File("externs");
         ZipFile zipFile = null;
         ZipOutputStream zipOutputStream = null;
@@ -247,7 +273,7 @@ public class COMPJSCRoyale extends MXMLJSCRoyale
             for (final Enumeration<? extends ZipEntry> entryEnum = zipFile.entries(); entryEnum.hasMoreElements();)
             {
                 final ZipEntry entry = entryEnum.nextElement();
-                if (!entry.getName().contains("js/out") &&
+                if (!entry.getName().contains(jsOut.getPath()) &&
                     !entry.getName().contains(SWCReader.CATALOG_XML))
                 {
                     if (config.isVerbose())
@@ -303,7 +329,7 @@ public class COMPJSCRoyale extends MXMLJSCRoyale
                     int pathIndex2 = files.indexOf("\"", pathIndex + 6);
                     int fileIndex2 = files.indexOf("/>", fileIndex);
                     String path = files.substring(pathIndex + 6, pathIndex2);
-                    if (!path.startsWith("js/out"))
+                    if (!path.startsWith(jsOut.getPath()))
                     {
                         fileList.append(files.substring(fileIndex - 8, fileIndex2 + 3));
                     }

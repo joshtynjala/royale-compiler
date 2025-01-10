@@ -37,6 +37,7 @@ import org.apache.royale.compiler.internal.config.annotations.Arguments;
 import org.apache.royale.compiler.internal.config.annotations.Config;
 import org.apache.royale.compiler.internal.config.annotations.DefaultArgumentValue;
 import org.apache.royale.compiler.internal.config.annotations.RoyaleOnly;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.internal.config.annotations.InfiniteArguments;
 import org.apache.royale.compiler.internal.config.annotations.Mapping;
 

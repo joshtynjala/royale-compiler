@@ -20,11 +20,17 @@
 package org.apache.royale.compiler.clients;
 
 import org.apache.royale.compiler.internal.driver.js.node.NodeModuleBackend;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 public class MXMLJSCNodeModule extends MXMLJSCNode
 {
     public MXMLJSCNodeModule()
     {
-        super(new NodeModuleBackend());
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLJSCNodeModule(JSModuleType jsModuleType)
+    {
+        super(new NodeModuleBackend(jsModuleType), jsModuleType);
     }
 }

@@ -95,6 +95,7 @@ import org.apache.royale.compiler.tree.as.ILiteralNode;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.units.ICompilationUnit.UnitType;
 import org.apache.royale.compiler.utils.ClosureUtils;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.flex.tools.FlexTool;
 import org.apache.royale.swc.ISWC;
 import org.apache.royale.swc.ISWCFileEntry;
@@ -203,14 +204,26 @@ public class MXMLJSCRoyale implements JSCompilerEntryPoint, ProblemQueryProvider
     protected ITargetSettings targetSettings;
     protected IJSApplication jsTarget;
     private IJSRoyalePublisher jsPublisher;
+    protected JSModuleType jsModuleType;
     
     public MXMLJSCRoyale()
     {
-    	this(new MXMLRoyaleBackend());
+    	this(JSModuleType.GOOG);
+    }
+    
+    public MXMLJSCRoyale(JSModuleType jsModuleType)
+    {
+    	this(new MXMLRoyaleBackend(jsModuleType), jsModuleType);
     }
     
     public MXMLJSCRoyale(IBackend backend)
     {
+        this(backend, JSModuleType.GOOG);
+    }
+    
+    public MXMLJSCRoyale(IBackend backend, JSModuleType jsModuleType)
+    {
+        this.jsModuleType = jsModuleType;
         workspace = new Workspace();
         workspace.setASDocDelegate(new RoyaleASDocDelegate());
         project = new RoyaleJSProject(workspace, backend);

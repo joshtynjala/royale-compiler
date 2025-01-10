@@ -48,6 +48,7 @@ import org.apache.royale.compiler.targets.ITargetProgressMonitor;
 import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.tree.mxml.IMXMLFileNode;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.visitor.IBlockVisitor;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
@@ -60,6 +61,23 @@ import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
  */
 public class MXMLJSCJSSWCBackend extends MXMLBackend
 {
+    public MXMLJSCJSSWCBackend()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLJSCJSSWCBackend(JSModuleType jsModuleType)
+    {
+        super();
+        this.jsModuleType = jsModuleType;
+    }
+
+    private JSModuleType jsModuleType;
+
+    public JSModuleType getJSModuleType()
+    {
+        return jsModuleType;
+    }
 
     @Override
     public Configurator createConfigurator()

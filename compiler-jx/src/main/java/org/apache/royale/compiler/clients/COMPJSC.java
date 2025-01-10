@@ -29,6 +29,7 @@ import org.apache.royale.compiler.internal.parsing.as.RoyaleASDocDelegate;
 import org.apache.royale.compiler.problems.ICompilerProblem;
 import org.apache.royale.compiler.problems.UnexpectedExceptionProblem;
 import org.apache.royale.compiler.targets.ITarget.TargetType;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.utils.ArgumentUtil;
 
 /**
@@ -167,9 +168,11 @@ public class COMPJSC extends MXMLJSC
             	for (String target : config.getCompilerTargets())
             	{
             		int result = 0;
-            		switch (JSTargetType.fromString(target))
+                    JSTargetType jsTargetType = JSTargetType.fromString(target);
+            		switch (jsTargetType)
 	                {
 	                case SWF:
+                    {
                         System.out.println("COMPC");
 	                    COMPC compc = new COMPC();
 	                    mxmlc = compc;
@@ -186,8 +189,10 @@ public class COMPJSC extends MXMLJSC
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
 	                case JS_ROYALE:
-                        System.out.println("COMPCJSCRoyale");
+                    {
+                        System.out.println("COMPJSCRoyale");
 	                	COMPJSCRoyale royale = new COMPJSCRoyale();
 	                	lastCompiler = royale;
 	                    result = royale.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -196,8 +201,23 @@ public class COMPJSC extends MXMLJSC
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
+                    case JS_ROYALE_MODULE:
+                    {
+                        System.out.println("COMPJSCRoyale (ESM)");
+                        COMPJSCRoyale royale = new COMPJSCRoyale(JSModuleType.ESM);
+                        lastCompiler = royale;
+                        result = royale.mainNoExit(removeASArgs(args), problems.getProblems(), false);
+                        if (result != COMPJSCRoyale.ExitCode.SUCCESS.getCode() && result != COMPJSCRoyale.ExitCode.WATCHING.getCode())
+                        {
+                            break targetloop;
+                        }
+                        break;
+                    }
 	                case JS_NATIVE:
                     case JS_NODE:
+                    {
+                        System.out.println("COMPJSCNative");
 	                	COMPJSCNative jsc = new COMPJSCNative();
 	                	lastCompiler = jsc;
 	                    result = jsc.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -206,6 +226,7 @@ public class COMPJSC extends MXMLJSC
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
 	                // if you add a new target here, don't forget to also add it
 	                // to flex2.tools.MxmlJSC in flex-compiler-oem for IDE support
 	                }

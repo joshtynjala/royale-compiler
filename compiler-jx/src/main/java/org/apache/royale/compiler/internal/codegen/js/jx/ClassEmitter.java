@@ -30,8 +30,10 @@ import org.apache.royale.compiler.definitions.IDefinition;
 import org.apache.royale.compiler.definitions.IFunctionDefinition;
 import org.apache.royale.compiler.definitions.INamespaceDefinition;
 import org.apache.royale.compiler.internal.codegen.as.ASEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.JSEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.JSSubEmitter;
 import org.apache.royale.compiler.internal.codegen.js.goog.JSGoogEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.node.NodeEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitter;
 import org.apache.royale.compiler.internal.codegen.js.utils.DocEmitterUtils;
 import org.apache.royale.compiler.internal.codegen.js.utils.EmitterUtils;
@@ -44,6 +46,7 @@ import org.apache.royale.compiler.tree.ASTNodeID;
 import org.apache.royale.compiler.tree.as.*;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.utils.ASNodeUtils;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 public class ClassEmitter extends JSSubEmitter implements
         ISubEmitter<IClassNode>
@@ -137,6 +140,39 @@ public class ClassEmitter extends JSSubEmitter implements
         
         fjs.getPackageFooterEmitter().emitClassInfo(node);
 
+		if (!getModel().isInternalClass(node.getQualifiedName()))
+		{
+            String typeName = fjs.formatQualifiedName(node.getQualifiedName());
+            switch (fjs.getJSModuleType())
+            {
+                case GOOG:
+                {
+                    // do nothing because goog.provide('x') is in the header
+                    break;
+                }
+                case ESM:
+                {
+                    writeNewline();
+                    writeToken(JSEmitterTokens.EXPORT);
+                    writeToken(ASEmitterTokens.DEFAULT);
+                    write(typeName);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+                case COMMONJS:
+                {
+                    writeNewline();
+                    write(NodeEmitterTokens.MODULE);
+                    write(ASEmitterTokens.MEMBER_ACCESS);
+                    writeToken(NodeEmitterTokens.EXPORTS);
+                    writeToken(ASEmitterTokens.EQUAL);
+                    write(typeName);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+            }
+		}
+
         getModel().popClass();
     }
     
@@ -208,7 +244,11 @@ public class ClassEmitter extends JSSubEmitter implements
             String qname = definition.getQualifiedName();
             if (qname != null && !qname.equals(""))
             {
-                if (fjs.getModel().isExterns && definition.getBaseName().equals(qname))
+                if (!JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+                {
+                    writeToken(ASEmitterTokens.CONST);
+                }
+                else if (fjs.getModel().isExterns && definition.getBaseName().equals(qname))
                 {
                     writeToken(ASEmitterTokens.VAR);
                 }

@@ -78,6 +78,7 @@ import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.units.ICompilationUnit.UnitType;
 import org.apache.royale.compiler.utils.ClosureUtils;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.flex.tools.FlexTool;
 import org.apache.royale.utils.ArgumentUtil;
 import org.apache.royale.utils.FilenameNormalization;
@@ -183,14 +184,22 @@ public class MXMLJSCNode implements JSCompilerEntryPoint, ProblemQueryProvider,
     protected ITargetSettings targetSettings;
     protected IJSApplication jsTarget;
     private IJSRoyalePublisher jsPublisher;
+    protected JSModuleType jsModuleType;
 
     public MXMLJSCNode()
     {
-        this(new NodeBackend());
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLJSCNode(JSModuleType jsModuleType)
+    {
+        this(new NodeBackend(jsModuleType), jsModuleType);
     }
     
-    protected MXMLJSCNode(IBackend backend)
+    protected MXMLJSCNode(IBackend backend, JSModuleType jsModuleType)
     {
+        this.jsModuleType = jsModuleType;
+
         workspace = new Workspace();
         workspace.setASDocDelegate(new RoyaleASDocDelegate());
         project = new RoyaleJSProject(workspace, backend);

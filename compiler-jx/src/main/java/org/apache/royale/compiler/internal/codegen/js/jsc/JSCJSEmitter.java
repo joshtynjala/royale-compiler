@@ -22,6 +22,7 @@ package org.apache.royale.compiler.internal.codegen.js.jsc;
 import java.io.FilterWriter;
 
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitter;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 /**
  * Concrete implementation of the 'Royale' JavaScript production.
@@ -34,6 +35,11 @@ public class JSCJSEmitter extends JSRoyaleEmitter
 
     public JSCJSEmitter(FilterWriter out)
     {
-        super(out);
+        this(out, JSModuleType.GOOG);
+    }
+
+    public JSCJSEmitter(FilterWriter out, JSModuleType jsModuleType)
+    {
+        super(out, jsModuleType);
     }
 }

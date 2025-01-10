@@ -41,6 +41,7 @@ import org.apache.royale.compiler.tree.ASTNodeID;
 import org.apache.royale.compiler.tree.as.*;
 import org.apache.royale.compiler.tree.metadata.IMetaTagNode;
 import org.apache.royale.compiler.tree.metadata.IMetaTagsNode;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.utils.NativeUtils;
 
 /**
@@ -142,7 +143,11 @@ public class FieldEmitter extends JSSubEmitter implements
         if (isPackageOrFileMember)
         {
             String qualifiedName = node.getQualifiedName();
-            if (fjs.getModel().isExterns && node.getName().equals(qualifiedName))
+            if (!JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+            {
+                writeToken(ASEmitterTokens.CONST);
+            }
+            else if (fjs.getModel().isExterns && node.getName().equals(qualifiedName))
             {
                 writeToken(ASEmitterTokens.VAR);
             }

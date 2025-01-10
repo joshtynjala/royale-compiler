@@ -27,6 +27,7 @@ import org.apache.royale.compiler.definitions.IPackageDefinition;
 import org.apache.royale.compiler.internal.tree.as.LabeledStatementNode;
 import org.apache.royale.compiler.tree.as.*;
 import org.apache.royale.compiler.tree.metadata.IMetaTagNode;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.visitor.IASNodeStrategy;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 
@@ -47,6 +48,8 @@ public interface IASEmitter extends INestingEmitter
     void setDocEmitter(IDocEmitter value);
 
     String postProcess(String output);
+
+    String postProcess(String output, ICompilationUnit cu);
 
     void emitImport(IImportNode node);
 

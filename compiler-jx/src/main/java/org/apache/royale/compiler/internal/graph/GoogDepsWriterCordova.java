@@ -23,13 +23,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.royale.compiler.internal.driver.js.goog.JSGoogConfiguration;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.swc.ISWC;
 
 public class GoogDepsWriterCordova extends GoogDepsWriter {
 
     public GoogDepsWriterCordova(File outputFolder, String mainClassName, JSGoogConfiguration config, List<ISWC> swcs)
 	{
-		super(outputFolder, mainClassName, config, swcs);
+		super(outputFolder, mainClassName, config, swcs, JSModuleType.GOOG);
 	}
 	
     private final String ROYALE_CORDOVA_PLUGIN = "@royalecordovaplugin";

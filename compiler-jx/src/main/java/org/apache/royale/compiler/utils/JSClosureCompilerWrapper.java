@@ -95,6 +95,7 @@ public class JSClosureCompilerWrapper
     private boolean sourceMap = false;
     private boolean verbose = false;
     private boolean preventRenameMxmlSymbolReferences = true;
+    private JSModuleType jsModuleType = JSModuleType.GOOG;
     
     public String targetFilePath;
     
@@ -141,6 +142,11 @@ public class JSClosureCompilerWrapper
     public void setExtraSymbolNamesToExport(Set<String> names)
     {
         extraSymbolNamesToExport = names;
+    }
+
+    public void setJSModuleType(JSModuleType type)
+    {
+        jsModuleType = type;
     }
     
     public boolean compile()
@@ -402,7 +408,24 @@ public class JSClosureCompilerWrapper
             options_.setDefineToBooleanLiteral("goog.DEBUG", false);
             
             // ToDo (erikdebruin): re-evaluate this option on future GC release
-            options_.setLanguageIn(LanguageMode.ECMASCRIPT5_STRICT);
+            switch (jsModuleType)
+            {
+                case GOOG:
+                {
+                    options_.setLanguageIn(LanguageMode.ECMASCRIPT5_STRICT);
+                    break;
+                }
+                case ESM:
+                {
+                    options_.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
+                    break;
+                }
+                case COMMONJS:
+                {
+                    options_.setLanguageIn(LanguageMode.ECMASCRIPT_2015);
+                    break;
+                }
+            }
             
             options_.setPreferSingleQuotes(true);
             

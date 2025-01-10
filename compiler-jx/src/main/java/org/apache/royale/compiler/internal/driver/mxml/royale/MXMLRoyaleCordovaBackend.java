@@ -32,6 +32,7 @@ import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.internal.projects.RoyaleProjectConfigurator;
 import org.apache.royale.compiler.problems.ICompilerProblem;
 import org.apache.royale.compiler.tree.mxml.IMXMLFileNode;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 /**
  * A concrete implementation of the {@link IBackend} API where the
@@ -41,6 +42,15 @@ import org.apache.royale.compiler.tree.mxml.IMXMLFileNode;
  */
 public class MXMLRoyaleCordovaBackend extends MXMLRoyaleBackend
 {
+    public MXMLRoyaleCordovaBackend()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLRoyaleCordovaBackend(JSModuleType jsModuleType)
+    {
+        super(jsModuleType);
+    }
 
     @Override
     public Configurator createConfigurator()

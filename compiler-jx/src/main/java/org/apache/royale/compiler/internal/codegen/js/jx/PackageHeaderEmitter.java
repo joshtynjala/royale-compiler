@@ -20,6 +20,8 @@
 package org.apache.royale.compiler.internal.codegen.js.jx;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -31,6 +33,7 @@ import org.apache.royale.compiler.codegen.ISubEmitter;
 import org.apache.royale.compiler.codegen.js.IJSEmitter;
 import org.apache.royale.compiler.definitions.*;
 import org.apache.royale.compiler.internal.codegen.as.ASEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.JSEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.JSSubEmitter;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitter;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitterTokens;
@@ -42,7 +45,6 @@ import org.apache.royale.compiler.internal.definitions.NamespaceDefinition.IName
 import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.internal.scopes.ASProjectScope;
 import org.apache.royale.compiler.internal.scopes.PackageScope;
-import org.apache.royale.compiler.projects.ICompilerProject;
 import org.apache.royale.compiler.scopes.IASScope;
 import org.apache.royale.compiler.targets.ITarget.TargetType;
 import org.apache.royale.compiler.tree.as.IClassNode;
@@ -51,6 +53,7 @@ import org.apache.royale.compiler.tree.as.IInterfaceNode;
 import org.apache.royale.compiler.tree.as.ITypeNode;
 import org.apache.royale.compiler.tree.as.IVariableNode;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.utils.NativeUtils;
 
 public class PackageHeaderEmitter extends JSSubEmitter implements
@@ -66,6 +69,8 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
     public void emit(IPackageDefinition definition)
     {
         RoyaleJSProject project = (RoyaleJSProject) getProject();
+        JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
+
         IASScope containedScope = definition.getContainedScope();
         ITypeDefinition type = EmitterUtils.findType(containedScope
                 .getAllLocalDefinitions());
@@ -172,36 +177,53 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
 
         if (!isExterns)
         {
-	        /* goog.provide('x');\n\n */
-	        write(JSGoogEmitterTokens.GOOG_PROVIDE);
-	        write(ASEmitterTokens.PAREN_OPEN);
-	        write(ASEmitterTokens.SINGLE_QUOTE);
-	        write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(qname, true));
-	        write(ASEmitterTokens.SINGLE_QUOTE);
-	        write(ASEmitterTokens.PAREN_CLOSE);
-	        writeNewline(ASEmitterTokens.SEMICOLON);
-	        
-	        HashMap<String, String> internalClasses = getEmitter().getModel().getInternalClasses();
-	        if (internalClasses.size() > 0)
-	        {
-	        	ArrayList<String> classesInOrder = new ArrayList<String>();
-	        	for (String internalClass : internalClasses.keySet())
-	        	{
-	        		classesInOrder.add(internalClass);
-	        	}
-	        	Collections.sort(classesInOrder);
-	        	for (String internalClass : classesInOrder)
-	        	{
-	        	       /* goog.provide('x');\n\n */
-	                write(JSGoogEmitterTokens.GOOG_PROVIDE);
-	                write(ASEmitterTokens.PAREN_OPEN);
-	                write(ASEmitterTokens.SINGLE_QUOTE);
-	                write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(internalClass, true));
-	                write(ASEmitterTokens.SINGLE_QUOTE);
-	                write(ASEmitterTokens.PAREN_CLOSE);
-	                writeNewline(ASEmitterTokens.SEMICOLON);
-	        	}
-	        }
+            switch (fjs.getJSModuleType())
+            {
+                case GOOG:
+                {
+                    /* goog.provide('x');\n */
+                    write(JSGoogEmitterTokens.GOOG_PROVIDE);
+                    write(ASEmitterTokens.PAREN_OPEN);
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(qname, true));
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    write(ASEmitterTokens.PAREN_CLOSE);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    
+                    HashMap<String, String> internalClasses = getEmitter().getModel().getInternalClasses();
+                    if (internalClasses.size() > 0)
+                    {
+                        ArrayList<String> classesInOrder = new ArrayList<String>();
+                        for (String internalClass : internalClasses.keySet())
+                        {
+                            classesInOrder.add(internalClass);
+                        }
+                        Collections.sort(classesInOrder);
+                        for (String internalClass : classesInOrder)
+                        {
+                            /* goog.provide('x');\n\n */
+                            write(JSGoogEmitterTokens.GOOG_PROVIDE);
+                            write(ASEmitterTokens.PAREN_OPEN);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(internalClass, true));
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(ASEmitterTokens.PAREN_CLOSE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                        }
+                    }
+                    break;
+                }
+                case ESM:
+                {
+                    // do nothing
+                    break;
+                }
+                case COMMONJS:
+                {
+                    // do nothing
+                    break;
+                }
+            }
         }
         else
         {
@@ -299,7 +321,7 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
         }
 
         boolean emitsRequires = emitRequires(requiresList, writtenRequires, cname, royaleProject);
-        boolean emitsInterfaces = emitInterfaces(interfacesList, writtenRequires);
+        boolean emitsInterfaces = emitInterfaces(interfacesList, writtenRequires, cname, royaleProject);
 
         // erikdebruin: Add missing language feature support, with e.g. 'is' and
         //              'as' operators. We don't need to worry about requiring
@@ -311,18 +333,79 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
                 && cu.getName().equals(royaleProject.mainCU.getName());
         if (isMainCU || makingSWC)
         {
-            ICompilerProject project = this.getProject();
-            if (project instanceof RoyaleJSProject)
+            if (royaleProject.needLanguage && !JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken().equals(cname))
             {
-                if (((RoyaleJSProject)project).needLanguage)
+                switch (fjs.getJSModuleType())
                 {
-                    write(JSGoogEmitterTokens.GOOG_REQUIRE);
-                    write(ASEmitterTokens.PAREN_OPEN);
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(JSRoyaleEmitterTokens.LANGUAGE_QNAME);
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(ASEmitterTokens.PAREN_CLOSE);
-                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    case GOOG:
+                    {
+                        /* goog.require('x');\n */
+                        write(JSGoogEmitterTokens.GOOG_REQUIRE);
+                        write(ASEmitterTokens.PAREN_OPEN);
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        write(JSRoyaleEmitterTokens.LANGUAGE_QNAME);
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        write(ASEmitterTokens.PAREN_CLOSE);
+                        writeNewline(ASEmitterTokens.SEMICOLON);
+                        break;
+                    }
+                    case ESM:
+                    {
+                        /* import x from 'a/b/c';\n */
+                        String imp = JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken();
+                        String[] impParts = imp.split("\\.");
+                        Path impPath = Paths.get(".", impParts);
+                        Path cnamePath =  Paths.get(".", cname.split("\\."));
+                        Path cnameParentPath = cnamePath.getParent();
+                        if (cnameParentPath == null)
+                        {
+                            cnameParentPath = Paths.get(".");
+                        }
+                        String relativePath = cnameParentPath.relativize(impPath).toString();
+                        writeToken(ASEmitterTokens.IMPORT);
+                        writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                        writeToken(JSEmitterTokens.FROM);
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        if (!relativePath.startsWith("."))
+                        {
+                            write("./");
+                        }
+                        write(relativePath);
+                        write(".js");
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        writeNewline(ASEmitterTokens.SEMICOLON);
+                        break;
+                    }
+                    case COMMONJS:
+                    {
+                        /* const x = require('a/b/c');\n */
+                        String imp = JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken();
+                        String[] impParts = imp.split("\\.");
+                        Path impPath = Paths.get(".", impParts);
+                        Path cnamePath =  Paths.get(".", cname.split("\\."));
+                        Path cnameParentPath = cnamePath.getParent();
+                        if (cnameParentPath == null)
+                        {
+                            cnameParentPath = Paths.get(".");
+                        }
+                        String relativePath = cnameParentPath.relativize(impPath).toString();
+                        writeToken(ASEmitterTokens.CONST);
+                        writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                        writeToken(ASEmitterTokens.EQUAL);
+                        write(NodeEmitterTokens.REQUIRE);
+                        write(ASEmitterTokens.PAREN_OPEN);
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        if (!relativePath.startsWith("."))
+                        {
+                            write("./");
+                        }
+                        write(relativePath);
+                        write(".js");
+                        write(ASEmitterTokens.SINGLE_QUOTE);
+                        write(ASEmitterTokens.PAREN_CLOSE);
+                        writeNewline(ASEmitterTokens.SEMICOLON);
+                        break;
+                    }
                 }
             }
         }
@@ -340,6 +423,8 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
 
     private boolean emitRequires(List<String> requiresList, List<String> writtenRequires, String cname, RoyaleJSProject project)
     {
+        JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
+
         boolean emitsRequires = false;
         if (requiresList != null)
         {
@@ -373,14 +458,76 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
 
                 if (writtenRequires.indexOf(imp) == -1)
                 {
-                    /* goog.require('x');\n */
-                    write(JSGoogEmitterTokens.GOOG_REQUIRE);
-                    write(ASEmitterTokens.PAREN_OPEN);
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(ASEmitterTokens.PAREN_CLOSE);
-                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    switch (fjs.getJSModuleType())
+                    {
+                        case GOOG:
+                        {
+                            /* goog.require('x');\n */
+                            write(JSGoogEmitterTokens.GOOG_REQUIRE);
+                            write(ASEmitterTokens.PAREN_OPEN);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(ASEmitterTokens.PAREN_CLOSE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                        case ESM:
+                        {
+                            /* import x from 'a/b/c';\n */
+                            String[] impParts = imp.split("\\.");
+                            Path impPath = Paths.get(".", impParts);
+                            Path cnamePath =  Paths.get(".", cname.split("\\."));
+                            Path cnameParentPath = cnamePath.getParent();
+                            if (cnameParentPath == null)
+                            {
+                                cnameParentPath = Paths.get(".");
+                            }
+                            String relativePath = cnameParentPath.relativize(impPath).toString();
+                            writeToken(ASEmitterTokens.IMPORT);
+                            writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            writeToken(JSEmitterTokens.FROM);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            if (!relativePath.startsWith("."))
+                            {
+                                write("./");
+                            }
+                            write(relativePath);
+                            write(".js");
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                        case COMMONJS:
+                        {
+                            /* const x = require('a/b/c');\n */
+                            String[] impParts = imp.split("\\.");
+                            Path impPath = Paths.get(".", impParts);
+                            Path cnamePath =  Paths.get(".", cname.split("\\."));
+                            Path cnameParentPath = cnamePath.getParent();
+                            if (cnameParentPath == null)
+                            {
+                                cnameParentPath = Paths.get(".");
+                            }
+                            String relativePath = cnameParentPath.relativize(impPath).toString();
+                            writeToken(ASEmitterTokens.CONST);
+                            writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            writeToken(ASEmitterTokens.EQUAL);
+                            write(NodeEmitterTokens.REQUIRE);
+                            write(ASEmitterTokens.PAREN_OPEN);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            if (!relativePath.startsWith("."))
+                            {
+                                write("./");
+                            }
+                            write(relativePath);
+                            write(".js");
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(ASEmitterTokens.PAREN_CLOSE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                    }
 
                     writtenRequires.add(imp);
 
@@ -391,8 +538,10 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
         return emitsRequires;
     }
 
-    private boolean emitInterfaces(List<String> interfacesList, List<String> writtenRequires)
+    private boolean emitInterfaces(List<String> interfacesList, List<String> writtenRequires, String cname, RoyaleJSProject project)
     {
+        JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
+
         boolean emitsInterfaces = false;
         if (interfacesList != null)
         {
@@ -401,13 +550,76 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
             {
                 if (writtenRequires.indexOf(imp) == -1)
                 {
-                    write(JSGoogEmitterTokens.GOOG_REQUIRE);
-                    write(ASEmitterTokens.PAREN_OPEN);
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
-                    write(ASEmitterTokens.SINGLE_QUOTE);
-                    write(ASEmitterTokens.PAREN_CLOSE);
-                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    switch (fjs.getJSModuleType())
+                    {
+                        case GOOG:
+                        {
+                            /* goog.require('x');\n */
+                            write(JSGoogEmitterTokens.GOOG_REQUIRE);
+                            write(ASEmitterTokens.PAREN_OPEN);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(ASEmitterTokens.PAREN_CLOSE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                        case ESM:
+                        {
+                            /* import x from 'a/b/c';\n */
+                            String[] impParts = imp.split("\\.");
+                            Path impPath = Paths.get(".", impParts);
+                            Path cnamePath =  Paths.get(".", cname.split("\\."));
+                            Path cnameParentPath = cnamePath.getParent();
+                            if (cnameParentPath == null)
+                            {
+                                cnameParentPath = Paths.get(".");
+                            }
+                            String relativePath = cnameParentPath.relativize(impPath).toString();
+                            writeToken(ASEmitterTokens.IMPORT);
+                            writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            writeToken(JSEmitterTokens.FROM);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            if (!relativePath.startsWith("."))
+                            {
+                                write("./");
+                            }
+                            write(relativePath);
+                            write(".js");
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                        case COMMONJS:
+                        {
+                            /* const x = require('a/b/c');\n */
+                            String[] impParts = imp.split("\\.");
+                            Path impPath = Paths.get(".", impParts);
+                            Path cnamePath =  Paths.get(".", cname.split("\\."));
+                            Path cnameParentPath = cnamePath.getParent();
+                            if (cnameParentPath == null)
+                            {
+                                cnameParentPath = Paths.get(".");
+                            }
+                            String relativePath = cnameParentPath.relativize(impPath).toString();
+                            writeToken(ASEmitterTokens.CONST);
+                            writeToken(((JSRoyaleEmitter)getEmitter()).formatQualifiedName(imp, true));
+                            writeToken(ASEmitterTokens.EQUAL);
+                            write(NodeEmitterTokens.REQUIRE);
+                            write(ASEmitterTokens.PAREN_OPEN);
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            if (!relativePath.startsWith("."))
+                            {
+                                write("./");
+                            }
+                            write(relativePath);
+                            write(".js");
+                            write(ASEmitterTokens.SINGLE_QUOTE);
+                            write(ASEmitterTokens.PAREN_CLOSE);
+                            writeNewline(ASEmitterTokens.SEMICOLON);
+                            break;
+                        }
+                    }
 
                     emitsInterfaces = true;
                 }
@@ -421,6 +633,7 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
         boolean emitsExternalRequires = false;
         if (externalRequiresList != null)
         {
+            JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
             Collections.sort(externalRequiresList);
             for (JSModuleRequireDescription m : externalRequiresList)
             {
@@ -436,7 +649,14 @@ public class PackageHeaderEmitter extends JSSubEmitter implements
                 {
                     /* var xyz = require('xyz');\n */
                     /* var someModule = require('some-module');\n */
-                    write(ASEmitterTokens.VAR);
+                    if (JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+                    {
+                        write(ASEmitterTokens.VAR);
+                    }
+                    else
+                    {
+                        write(ASEmitterTokens.CONST);
+                    }
                     write(ASEmitterTokens.SPACE);
                     write(variableName);
                     write(ASEmitterTokens.SPACE);

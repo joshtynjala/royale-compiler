@@ -66,6 +66,7 @@ import org.apache.royale.compiler.tree.as.IPackageNode;
 import org.apache.royale.compiler.tree.as.ISetterNode;
 import org.apache.royale.compiler.tree.as.IVariableNode;
 import org.apache.royale.compiler.tree.metadata.IMetaTagNode;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.utils.NativeUtils;
 
 /**
@@ -78,7 +79,7 @@ public class JSRoyaleASDocDITAEmitter extends JSRoyaleEmitter implements IJSRoya
 {
 
     @Override
-    public String postProcess(String output)
+    public String postProcess(String output, ICompilationUnit cu)
     {
     	return output;
     }

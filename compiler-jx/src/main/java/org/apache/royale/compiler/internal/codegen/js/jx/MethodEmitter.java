@@ -34,13 +34,16 @@ import org.apache.royale.compiler.internal.codegen.js.JSSessionModel.ImplicitBin
 import org.apache.royale.compiler.internal.codegen.js.JSSubEmitter;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitter;
 import org.apache.royale.compiler.internal.codegen.js.goog.JSGoogEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.node.NodeEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.utils.EmitterUtils;
+import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.internal.tree.as.FunctionNode;
 import org.apache.royale.compiler.problems.ICompilerProblem;
 import org.apache.royale.compiler.projects.ICompilerProject;
 import org.apache.royale.compiler.tree.as.IClassNode;
 import org.apache.royale.compiler.tree.as.IExpressionNode;
 import org.apache.royale.compiler.tree.as.IFunctionNode;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.utils.ASTUtil;
 
 public class MethodEmitter extends JSSubEmitter implements
@@ -63,6 +66,7 @@ public class MethodEmitter extends JSSubEmitter implements
         fn.parseFunctionBody(new ArrayList<ICompilerProblem>());
 
         ICompilerProject project = getWalker().getProject();
+        RoyaleJSProject royaleProject = (RoyaleJSProject) project;
 
         fjs.getDocEmitter().emitMethodDoc(node, project);
         ASTUtil.processFunctionNode(fn, project);
@@ -84,7 +88,11 @@ public class MethodEmitter extends JSSubEmitter implements
                 classification == IFunctionDefinition.FunctionClassification.PACKAGE_MEMBER)
         {
             String qualifiedName = node.getQualifiedName();
-            if (fjs.getModel().isExterns && node.getName().equals(qualifiedName))
+            if (!JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+            {
+                writeToken(ASEmitterTokens.CONST);
+            }
+            else if (fjs.getModel().isExterns && node.getName().equals(qualifiedName))
             {
                 writeToken(ASEmitterTokens.VAR);
             }
@@ -100,9 +108,16 @@ public class MethodEmitter extends JSSubEmitter implements
             if (qname != null && !qname.equals(""))
             {
                 startMapping(nameNode);
-                if (isConstructor && fjs.getModel().isExterns && typeDef.getBaseName().equals(qname))
+                if (isConstructor)
                 {
-                    writeToken(ASEmitterTokens.VAR);
+                    if (!JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+                    {
+                        writeToken(ASEmitterTokens.CONST);
+                    }
+                    else if (fjs.getModel().isExterns && typeDef.getBaseName().equals(qname))
+                    {
+                        writeToken(ASEmitterTokens.VAR);
+                    }
                 }
                 write(fjs.formatQualifiedName(qname));
                 if (!isConstructor)
@@ -152,6 +167,39 @@ public class MethodEmitter extends JSSubEmitter implements
         if (isConstructor && !getEmitter().getModel().isExterns)
         {
             emitExtendsSuperClass(node, qname, hasSuperClass, addingBindableExtendsSupport);
+        }
+
+        if(classification == IFunctionDefinition.FunctionClassification.PACKAGE_MEMBER)
+        {
+            String qualifiedName = node.getQualifiedName();
+            switch (fjs.getJSModuleType())
+            {
+                case GOOG:
+                {
+                    // do nothing because goog.provide('x') is in the header
+                    break;
+                }
+                case ESM:
+                {
+                    writeNewline();
+                    writeToken(JSEmitterTokens.EXPORT);
+                    writeToken(ASEmitterTokens.DEFAULT);
+                    write(fjs.formatQualifiedName(qualifiedName));
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+                case COMMONJS:
+                {
+                    writeNewline();
+                    write(NodeEmitterTokens.MODULE);
+                    write(ASEmitterTokens.MEMBER_ACCESS);
+                    writeToken(NodeEmitterTokens.EXPORTS);
+                    writeToken(ASEmitterTokens.EQUAL);
+                    write(fjs.formatQualifiedName(qualifiedName));
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+            }
         }
     }
 

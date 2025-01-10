@@ -17,27 +17,22 @@
  *
  */
 
-package org.apache.royale.compiler.internal.codegen.mxml.jsc;
+package org.apache.royale.compiler.utils;
 
+public enum JSModuleType {
+	GOOG("goog"),
+	ESM("esm"),
+	COMMONJS("commonjs");
 
-import java.io.FilterWriter;
+	private final String value;
 
-import org.apache.royale.compiler.codegen.mxml.royale.IMXMLRoyaleEmitter;
-import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLRoyaleEmitter;
-import org.apache.royale.compiler.utils.JSModuleType;
-
-/**
- * @author Erik de Bruin
- */
-public class MXMLJSCJSEmitter extends MXMLRoyaleEmitter implements
-        IMXMLRoyaleEmitter
-{
-	public MXMLJSCJSEmitter(FilterWriter out) {
-		this(out, JSModuleType.GOOG);
+	JSModuleType(String value)
+	{
+		this.value = value;
 	}
 
-	public MXMLJSCJSEmitter(FilterWriter out, JSModuleType jsModuleType) {
-		super(out, jsModuleType);
+	public String getValue()
+	{
+		return value;
 	}
-
 }

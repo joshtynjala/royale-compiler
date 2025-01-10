@@ -70,7 +70,8 @@ public class MXMLWriter extends JSWriter
 
         try
         {
-            out.write(mxmlEmitter.postProcess(writer.toString()).getBytes("utf8"));
+            String result = mxmlEmitter.postProcess(writer.toString(), compilationUnit);
+            out.write(result.getBytes("utf8"));
         }
         catch (IOException e)
         {

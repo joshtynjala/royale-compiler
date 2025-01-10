@@ -28,6 +28,7 @@ import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLRoyalePublish
 import org.apache.royale.compiler.internal.driver.js.jsc.JSCBackend;
 import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.problems.ICompilerProblem;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 /**
  * A concrete implementation of the {@link IBackend} API for the 'node' code
@@ -37,6 +38,16 @@ import org.apache.royale.compiler.problems.ICompilerProblem;
  */
 public class NodeBackend extends JSCBackend
 {
+    public NodeBackend()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public NodeBackend(JSModuleType jsModuleType)
+    {
+        super(jsModuleType);
+    }
+
     @Override
     public MXMLRoyalePublisher createPublisher(RoyaleJSProject project,
                                                List<ICompilerProblem> errors, Configuration config)

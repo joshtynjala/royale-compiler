@@ -47,6 +47,7 @@ import org.apache.royale.compiler.tree.ASTNodeID;
 import org.apache.royale.compiler.tree.as.*;
 import org.apache.royale.compiler.tree.as.IContainerNode.ContainerType;
 import org.apache.royale.compiler.tree.metadata.IMetaTagNode;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.utils.ASNodeUtils;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 import org.apache.royale.compiler.visitor.as.IASBlockWalker;
@@ -169,6 +170,12 @@ public class ASEmitter implements IASEmitter, IEmitter
 
     @Override
     public String postProcess(String output)
+    {
+    	return postProcess(output, null);
+    }
+
+    @Override
+    public String postProcess(String output, ICompilationUnit cu)
     {
     	return output;
     }

@@ -103,7 +103,7 @@ public class JSWriter implements IJSWriter
             if(!isExterns)
             {
                 //nothing to post-process in externs
-                emitted = emitter.postProcess(emitted);
+                emitted = emitter.postProcess(emitted, compilationUnit);
             }
             jsOut.write(emitted.getBytes("utf8"));
         }

@@ -25,28 +25,75 @@ import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLRoyalePublish
 import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.tree.as.IDefinitionNode;
 import org.apache.royale.compiler.tree.mxml.IMXMLDocumentNode;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 public class JSCPublisher extends MXMLRoyalePublisher
 {
     public JSCPublisher(RoyaleJSProject project, Configuration config)
     {
-        super(project, config);
+        this(project, config, JSModuleType.GOOG);
+    }
+
+    public JSCPublisher(RoyaleJSProject project, Configuration config, JSModuleType jsModuleType)
+    {
+        super(project, config, jsModuleType);
         this.project = project;
     }
 
     private RoyaleJSProject project;
 
     @Override
-    protected String getTemplateBody(String mainClassQName)
+	protected String getTemplateBody(String type, String mainClassQName)
     {
         // simply call the constructor by default
         // there is no start() method to call
         StringBuilder bodyHTML = new StringBuilder();
-        bodyHTML.append("\t<script type=\"text/javascript\">\n");
-        bodyHTML.append("\t\tnew ");
-        bodyHTML.append(mainClassQName);
-        bodyHTML.append("();\n");
-        bodyHTML.append("\t</script>\n");
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                bodyHTML.append("\t\tnew ");
+                bodyHTML.append(mainClassQName);
+                bodyHTML.append("();\n");
+                bodyHTML.append("\t</script>\n");
+                break;
+            }
+            case ESM:
+            {
+                if ("intermediate".equals(type))
+                {
+                    bodyHTML.append("\t<script type=\"module\">\n");
+                    bodyHTML.append("\t\timport ");
+                    bodyHTML.append(mainClassQName.replaceAll("\\.", "_"));
+                    bodyHTML.append(" from \"./");
+                    bodyHTML.append(String.join("/", mainClassQName.split("\\.")));
+                    bodyHTML.append(".js\";\n");
+                    bodyHTML.append("\t\tnew ");
+                    bodyHTML.append(mainClassQName);
+                    bodyHTML.append("()");
+                    bodyHTML.append(";\n\t</script>\n");
+                }
+                else
+                {
+                    bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                    bodyHTML.append("\t\tnew ");
+                    bodyHTML.append(mainClassQName);
+                    bodyHTML.append("()");
+                    bodyHTML.append(";\n\t</script>\n");
+                }
+                break;
+            }
+            case COMMONJS:
+            {
+                bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                bodyHTML.append("\t\tnew ");
+                bodyHTML.append(mainClassQName);
+                bodyHTML.append("()");
+                bodyHTML.append(";\n\t</script>\n");
+                break;
+            }
+        }
         return bodyHTML.toString();
     }
 }

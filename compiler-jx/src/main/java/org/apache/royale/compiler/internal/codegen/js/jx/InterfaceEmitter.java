@@ -26,16 +26,18 @@ import org.apache.royale.compiler.internal.codegen.as.ASEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.JSDocEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.JSEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.JSSubEmitter;
+import org.apache.royale.compiler.internal.codegen.js.node.NodeEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleDocEmitter;
 import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleEmitter;
+import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 import org.apache.royale.compiler.internal.tree.as.TypedExpressionNode;
-import org.apache.royale.compiler.projects.ICompilerProject;
 import org.apache.royale.compiler.tree.ASTNodeID;
 import org.apache.royale.compiler.tree.as.IAccessorNode;
 import org.apache.royale.compiler.tree.as.IDefinitionNode;
 import org.apache.royale.compiler.tree.as.IExpressionNode;
 import org.apache.royale.compiler.tree.as.IFunctionNode;
 import org.apache.royale.compiler.tree.as.IInterfaceNode;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 public class InterfaceEmitter extends JSSubEmitter implements
         ISubEmitter<IInterfaceNode>
@@ -52,7 +54,7 @@ public class InterfaceEmitter extends JSSubEmitter implements
         // TODO (mschmalle) will remove this cast as more things get abstracted
         JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
 
-        ICompilerProject project = getWalker().getProject();
+        RoyaleJSProject project = (RoyaleJSProject) getWalker().getProject();
 
         fjs.getDocEmitter().emitInterfaceDoc(node, project);
 
@@ -68,9 +70,47 @@ public class InterfaceEmitter extends JSSubEmitter implements
             emitMember(mnode, node);
         }
         fjs.getPackageFooterEmitter().emitClassInfo(node);
+
+		if (!getModel().isInternalClass(node.getQualifiedName()))
+		{
+            String typeName = fjs.formatQualifiedName(node.getQualifiedName());
+            switch (fjs.getJSModuleType())
+            {
+                case GOOG:
+                {
+                    // do nothing because goog.provide('x') is in the header
+                    break;
+                }
+                case ESM:
+                {
+                    writeNewline();
+                    writeToken(JSEmitterTokens.EXPORT);
+                    writeToken(ASEmitterTokens.DEFAULT);
+                    write(typeName);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+                case COMMONJS:
+                {
+                    writeNewline();
+                    write(NodeEmitterTokens.MODULE);
+                    write(ASEmitterTokens.MEMBER_ACCESS);
+                    writeToken(NodeEmitterTokens.EXPORTS);
+                    writeToken(ASEmitterTokens.EQUAL);
+                    write(typeName);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                    break;
+                }
+            }
+		}
     }
 
     private void emitConstructor(String qname) {
+        JSRoyaleEmitter fjs = (JSRoyaleEmitter) getEmitter();
+        if (!JSModuleType.GOOG.equals(fjs.getJSModuleType()))
+        {
+            writeToken(ASEmitterTokens.CONST);
+        }
         write(getEmitter().formatQualifiedName(qname));
         write(ASEmitterTokens.SPACE);
         writeToken(ASEmitterTokens.EQUAL);

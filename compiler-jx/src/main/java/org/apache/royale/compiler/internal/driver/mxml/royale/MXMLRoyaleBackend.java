@@ -50,6 +50,7 @@ import org.apache.royale.compiler.targets.ITargetProgressMonitor;
 import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.tree.mxml.IMXMLFileNode;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.visitor.IBlockVisitor;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
@@ -62,6 +63,23 @@ import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
  */
 public class MXMLRoyaleBackend extends MXMLBackend
 {
+    public MXMLRoyaleBackend()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLRoyaleBackend(JSModuleType jsModuleType)
+    {
+        super();
+        this.jsModuleType = jsModuleType;
+    }
+
+    protected JSModuleType jsModuleType;
+
+    public JSModuleType getJSModuleType()
+    {
+        return jsModuleType;
+    }
 
     @Override
     public Configurator createConfigurator()
@@ -72,7 +90,7 @@ public class MXMLRoyaleBackend extends MXMLBackend
     @Override
     public IMXMLEmitter createMXMLEmitter(FilterWriter out)
     {
-        return new MXMLRoyaleEmitter(out);
+        return new MXMLRoyaleEmitter(out, jsModuleType);
     }
 
     @Override
@@ -102,7 +120,7 @@ public class MXMLRoyaleBackend extends MXMLBackend
     @Override
     public IJSEmitter createEmitter(FilterWriter out)
     {
-        IJSEmitter emitter = new JSRoyaleEmitter(out);
+        IJSEmitter emitter = new JSRoyaleEmitter(out, jsModuleType);
         emitter.setDocEmitter(createDocEmitter(emitter));
         return emitter;
     }
@@ -126,6 +144,6 @@ public class MXMLRoyaleBackend extends MXMLBackend
     public MXMLRoyalePublisher createPublisher(RoyaleJSProject project,
             List<ICompilerProblem> errors, Configuration config)
     {
-        return new MXMLRoyalePublisher(project, config);
+        return new MXMLRoyalePublisher(project, config, jsModuleType);
     }
 }

@@ -728,7 +728,13 @@ public class JSEmitter extends ASEmitter implements IJSEmitter
                         coercionStart = "String(";
                     }
                 }
-                else coercionStart = "org.apache.royale.utils.Language.string(";
+                else
+                {
+                    if (project instanceof RoyaleJSProject)
+                        ((RoyaleJSProject)project).needLanguage = true;
+                    getModel().needLanguage = true;
+                    coercionStart = formatQualifiedName(JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken()) + ".string(";
+                }
             }
         }
         if ( assignedDef != null

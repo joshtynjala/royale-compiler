@@ -78,6 +78,7 @@ import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.units.ICompilationUnit.UnitType;
 import org.apache.royale.compiler.utils.ClosureUtils;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.flex.tools.FlexTool;
 import org.apache.royale.utils.ArgumentUtil;
 import org.apache.royale.utils.FilenameNormalization;
@@ -183,10 +184,18 @@ public class MXMLJSCNative implements JSCompilerEntryPoint, ProblemQueryProvider
     protected ITargetSettings targetSettings;
     protected IJSApplication jsTarget;
     private IJSRoyalePublisher jsPublisher;
+    protected JSModuleType jsModuleType;
     
     public MXMLJSCNative()
     {
-        IBackend backend = new JSCBackend();
+        this(JSModuleType.GOOG);
+    }
+    
+    public MXMLJSCNative(JSModuleType jsModuleType)
+    {
+    	this.jsModuleType = jsModuleType;
+
+        IBackend backend = new JSCBackend(jsModuleType);
 
         workspace = new Workspace();
         workspace.setASDocDelegate(new RoyaleASDocDelegate());

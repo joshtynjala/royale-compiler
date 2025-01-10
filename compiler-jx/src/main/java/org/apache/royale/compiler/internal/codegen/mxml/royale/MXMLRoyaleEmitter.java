@@ -24,6 +24,8 @@ import java.io.File;
 import java.io.FilterWriter;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -37,6 +39,7 @@ import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.Set;
 import java.util.Stack;
+import java.util.regex.Matcher;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.royale.abc.ABCConstants;
@@ -79,6 +82,7 @@ import org.apache.royale.compiler.internal.codegen.js.royale.JSRoyaleDocEmitter;
 import org.apache.royale.compiler.internal.codegen.js.goog.JSGoogEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.jx.BindableEmitter;
 import org.apache.royale.compiler.internal.codegen.js.jx.PackageFooterEmitter;
+import org.apache.royale.compiler.internal.codegen.js.node.NodeEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.utils.EmitterUtils;
 import org.apache.royale.compiler.internal.codegen.mxml.MXMLEmitter;
 import org.apache.royale.compiler.internal.driver.js.royale.JSCSSCompilationSession;
@@ -105,6 +109,7 @@ import org.apache.royale.compiler.tree.metadata.IMetaTagNode;
 import org.apache.royale.compiler.tree.metadata.IMetaTagsNode;
 import org.apache.royale.compiler.tree.mxml.*;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.utils.NativeUtils;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
 import org.apache.royale.swc.ISWC;
@@ -182,16 +187,30 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
         return sourceMapMappings;
     }
 
+    private JSModuleType jsModuleType;
+
+    public JSModuleType getJSModuleType()
+    {
+        return jsModuleType;
+    }
+
     public MXMLRoyaleEmitter(FilterWriter out)
     {
+        this(out, JSModuleType.GOOG);
+    }
+
+    public MXMLRoyaleEmitter(FilterWriter out, JSModuleType jsModuleType)
+    {
         super(out);
+        this.jsModuleType = jsModuleType;
+        
         sourceMapMappings = new ArrayList<SourceMapMapping>();
 
         mxmlDescriptorEmitter = new JSRoyaleBasicMXMLDescriptorEmitter(this);
     }
 
     @Override
-    public String postProcess(String output)
+    public String postProcess(String output, ICompilationUnit cu)
     {
         IASEmitter asEmitter = ((IMXMLBlockWalker) getMXMLWalker()).getASEmitter();
         Set<String> asEmitterUsedNames = ((JSRoyaleEmitter)asEmitter).usedNames;
@@ -246,39 +265,115 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
         int provideIndex = -1;
         ArrayList<String> namesToAdd = new ArrayList<String>();
         ArrayList<String> foundRequires = new ArrayList<String>();
+        boolean inDocComment = false;
+        boolean inFileOverviewComment = false;
         int len = lines.length;
         for (int i = 0; i < len; i++)
         {
             String line = lines[i];
     		if (stillSearching)
     		{
-                if (provideIndex == -1 || !sawRequires)
+                boolean sawRequireOnLine = false;
+                switch (jsModuleType)
                 {
-                    int c = line.indexOf(JSGoogEmitterTokens.GOOG_PROVIDE.getToken());
-                    if (c != -1)
+                    case GOOG:
                     {
-                        // if zero requires are found, require Language after the
-                        // call to goog.provide
-                        provideIndex = i + 1;
+                        if (provideIndex == -1 || !sawRequires)
+                        {
+                            int c = line.indexOf(JSGoogEmitterTokens.GOOG_PROVIDE.getToken());
+                            if (c != -1)
+                            {
+                                // if zero requires are found, require Language after the
+                                // call to goog.provide
+                                provideIndex = i + 1;
+                            }
+                        }
+                        int c = line.indexOf(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+                        if (c > -1)
+                        {
+                            int c2 = line.indexOf(")");
+                            String s = line.substring(c + 14, c2 - 1);
+                            if (s.equals(IASLanguageConstants.XML))
+                            {
+                                foundXML = true;
+                            }
+                            sawRequireOnLine = true;
+                            foundRequires.add(s);
+                            if (!usedNames.contains(s))
+                            {
+                                removeLineFromMappings(i);
+                                continue;
+                            }
+                        }
+                        break;
+                    }
+                    case ESM:
+                    {
+                        if (inDocComment)
+                        {
+                            int c = line.indexOf("@fileoverview");
+                            if (c != -1)
+                            {
+                                inFileOverviewComment = true;
+                            }
+                            c = line.indexOf("*/");
+                            if (c != -1)
+                            {
+                                if (provideIndex == -1 && inFileOverviewComment)
+                                {
+                                    provideIndex = endRequires = i + 1;
+                                }
+                                inFileOverviewComment = false;
+                                inDocComment = false;
+                            }
+                        }
+                        else
+                        {
+                            int c = line.indexOf(ASEmitterTokens.IMPORT.getToken() + " ");
+                            if (c != -1)
+                            {
+                                int importPrefixLength = c + ASEmitterTokens.IMPORT.getToken().length() + 1;
+                                int c1 = line.indexOf(" ", importPrefixLength);
+                                foundRequires.add(line.substring(importPrefixLength, c1).replaceAll("\\$_\\$", "."));
+                                endRequires = i + 1;
+                                sawRequireOnLine = true;
+                            }
+                            else
+                            {
+                                c = line.indexOf("/**");
+                                if (c != -1)
+                                {
+                                    inDocComment = true;
+                                    if (provideIndex != -1)
+                                    {
+                                        // no more imports allowed in ESM
+                                        sawRequires = true;
+                                        sawRequireOnLine = false;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    case COMMONJS:
+                    {
+                        int c = line.indexOf(NodeEmitterTokens.REQUIRE.getToken() + "(");
+                        if (c != -1)
+                        {
+                            int requirePrefixLength = c + NodeEmitterTokens.REQUIRE.getToken().length() + 2;
+                            int c1 = line.indexOf("\"", requirePrefixLength);
+                            foundRequires.add(line.substring(requirePrefixLength, c1).replaceAll("\\$_\\$", "."));
+                            provideIndex = i - 1;
+                            sawRequireOnLine = true;
+                        }
+                        break;
                     }
                 }
-	            int c = line.indexOf(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
-	            if (c > -1)
-	            {
-	                int c2 = line.indexOf(")");
-	                String s = line.substring(c + 14, c2 - 1);
-                    if (s.equals(IASLanguageConstants.XML))
-                    {
-                        foundXML = true;
-                    }
-	    			sawRequires = true;
-                    foundRequires.add(s);
-	    			if (!usedNames.contains(s))
-                    {
-                        removeLineFromMappings(i);
-                        continue;
-                    }
-	    		}
+                if (sawRequireOnLine)
+                {
+                    sawRequires = true;
+                    endRequires = i;
+                }
 	    		else if (sawRequires)
 	    		{
 	    	    	// append info() structure if main CU
@@ -299,37 +394,118 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
                                 {
                                     continue;
                                 }
-                            	ICompilationUnit cu = royaleProject.resolveQNameToCompilationUnit(usedName);
-                                if (cu == null)
+                            	ICompilationUnit usedCU = royaleProject.resolveQNameToCompilationUnit(usedName);
+                                if (usedCU == null)
                                 {
                                     System.out.println("didn't find CompilationUnit for " + usedName);
+                                    if (!JSModuleType.GOOG.equals(jsModuleType))
+                                    {
+                                        throw new RuntimeException("didn't find CompilationUnit for: " + usedName);
+                                    }
                                 }
                             }
                             namesToAdd.add(usedName);
                         }
                     }
 
-                    for (String nameToAdd : namesToAdd) {
+                    for (String nameToAdd : namesToAdd)
+                    {
                         finalLines.add(createRequireLine(nameToAdd,false));
                         addLineToMappings(i);
                     }
 
-	    			endRequires = finalLines.size();
+                    endRequires = finalLines.size();
 	    		}
     		}
     		finalLines.add(line);
     	}
+        if (provideIndex == -1)
+        {
+            // this shouldn't happen
+            provideIndex = 0;
+        }
+        if (endRequires == -1)
+        {
+            endRequires = provideIndex + 1;
+        }
         boolean needXML = ((RoyaleJSProject)(((IMXMLBlockWalker) getMXMLWalker()).getProject())).needXML;
         if (needXML && !foundXML)
         {
             StringBuilder appendString = new StringBuilder();
-            appendString.append(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
-            appendString.append(ASEmitterTokens.PAREN_OPEN.getToken());
-            appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
-            appendString.append(IASLanguageConstants.XML);
-            appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
-            appendString.append(ASEmitterTokens.PAREN_CLOSE.getToken());
-            appendString.append(ASEmitterTokens.SEMICOLON.getToken());
+            switch (jsModuleType)
+            {
+                case GOOG:
+                {
+                    /* goog.require('x'); */
+                    appendString.append(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+                    appendString.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    appendString.append(IASLanguageConstants.XML);
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    appendString.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                    appendString.append(ASEmitterTokens.SEMICOLON.getToken());
+                    break;
+                }
+                case ESM:
+                {
+                    /* import x from 'a/b/c'; */
+                    Path impPath = Paths.get(".", IASLanguageConstants.XML);
+                    Path symbolNamePath = Paths.get(".", currentClassName.split("\\."));
+                    Path symbolNameParentPath = symbolNamePath.getParent();
+                    if (symbolNameParentPath == null)
+                    {
+                        symbolNameParentPath = Paths.get(".");
+                    }
+                    String relativePath = symbolNameParentPath.relativize(impPath).toString();
+                    appendString.append(ASEmitterTokens.IMPORT.getToken());
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(formatQualifiedName(IASLanguageConstants.XML, true));
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(JSEmitterTokens.FROM.getToken());
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        appendString.append("./");
+                    }
+                    appendString.append(relativePath);
+                    appendString.append(".js");
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    appendString.append(ASEmitterTokens.SEMICOLON.getToken());
+                    break;
+                }
+                case COMMONJS:
+                {
+                    /* const x = require('a/b/c'); */
+                    Path impPath = Paths.get(".", IASLanguageConstants.XML);
+                    Path symbolNamePath = Paths.get(".", currentClassName.split("\\."));
+                    Path symbolNameParentPath = symbolNamePath.getParent();
+                    if (symbolNameParentPath == null)
+                    {
+                        symbolNameParentPath = Paths.get(".");
+                    }
+                    String relativePath = symbolNameParentPath.relativize(impPath).toString();
+                    appendString.append(ASEmitterTokens.CONST.getToken());
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(formatQualifiedName(IASLanguageConstants.XML, true));
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(ASEmitterTokens.EQUAL.getToken());
+                    appendString.append(ASEmitterTokens.SPACE.getToken());
+                    appendString.append(NodeEmitterTokens.REQUIRE.getToken());
+                    appendString.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        appendString.append("./");
+                    }
+                    appendString.append(relativePath);
+                    appendString.append(".js");
+                    appendString.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    appendString.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                    appendString.append(ASEmitterTokens.SEMICOLON.getToken());
+                    break;
+                }
+            }
             finalLines.add(endRequires, appendString.toString());
             addLineToMappings(endRequires);
             endRequires++;
@@ -617,20 +793,63 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
                     String cssInject = "\n\n" + thisDef + ".prototype.cssData = [";
                     JSCSSCompilationSession cssSession = (JSCSSCompilationSession) royaleProject.getCSSCompilationSession();
+                    cssSession.setJSModuleType(jsModuleType);
+                    cssSession.setClassQName(currentClassName);
                     String s = cssSession.getEncodedCSS();
                     if (s != null)
                     {
-                        int reqidx = s.indexOf(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
-                        if (reqidx != -1)
+                        switch (jsModuleType)
                         {
-                            String cssRequires = s.substring(reqidx);
-                            s = s.substring(0, reqidx - 1);
-                            String[] cssRequireLines = cssRequires.split("\n");
-                            for(String require : cssRequireLines)
+                            case GOOG:
                             {
-                                finalLines.add(endRequires, require);
-                                addLineToMappings(endRequires);
-                                endRequires++;
+                                int reqidx = s.indexOf(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+                                if (reqidx != -1)
+                                {
+                                    String cssRequires = s.substring(reqidx);
+                                    s = s.substring(0, reqidx - 1);
+                                    String[] cssRequireLines = cssRequires.split("\n");
+                                    for(String require : cssRequireLines)
+                                    {
+                                        finalLines.add(endRequires, require);
+                                        addLineToMappings(endRequires);
+                                        endRequires++;
+                                    }
+                                }
+                                break;
+                            }
+                            case ESM:
+                            {
+                                int reqidx = s.indexOf(ASEmitterTokens.IMPORT.getToken());
+                                if (reqidx != -1)
+                                {
+                                    String cssRequires = s.substring(reqidx);
+                                    s = s.substring(0, reqidx - 1);
+                                    String[] cssRequireLines = cssRequires.split("\n");
+                                    for(String require : cssRequireLines)
+                                    {
+                                        finalLines.add(endRequires, require);
+                                        addLineToMappings(endRequires);
+                                        endRequires++;
+                                    }
+                                }
+                                break;
+                            }
+                            case COMMONJS:
+                            {
+                                int reqidx = s.indexOf(NodeEmitterTokens.REQUIRE.getToken() + "(");
+                                if (reqidx != -1)
+                                {
+                                    String cssRequires = s.substring(reqidx);
+                                    s = s.substring(0, reqidx - 1);
+                                    String[] cssRequireLines = cssRequires.split("\n");
+                                    for(String require : cssRequireLines)
+                                    {
+                                        finalLines.add(endRequires, require);
+                                        addLineToMappings(endRequires);
+                                        endRequires++;
+                                    }
+                                }
+                                break;
                             }
                         }
                         cssInject += s;
@@ -936,6 +1155,35 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
         emitMetaData(cdef);
 
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                // do nothing because goog.provide('x') is in the header
+                break;
+            }
+            case ESM:
+            {
+                writeNewline();
+                writeToken(JSEmitterTokens.EXPORT);
+                writeToken(ASEmitterTokens.DEFAULT);
+                write(formatQualifiedName(node.getQualifiedName()));
+                writeNewline(ASEmitterTokens.SEMICOLON);
+                break;
+            }
+            case COMMONJS:
+            {
+                writeNewline();
+                write(NodeEmitterTokens.MODULE);
+                write(ASEmitterTokens.MEMBER_ACCESS);
+                writeToken(NodeEmitterTokens.EXPORTS);
+                writeToken(ASEmitterTokens.EQUAL);
+                write(formatQualifiedName(node.getQualifiedName()));
+                writeNewline(ASEmitterTokens.SEMICOLON);
+                break;
+            }
+        }
+
         emitSourceMapDirective(node);
     }
 
@@ -1123,6 +1371,10 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
         	}
         }
         writeNewline(" */");
+        if (!JSModuleType.GOOG.equals(getJSModuleType()))
+        {
+            writeToken(ASEmitterTokens.CONST);
+        }
         writeToken(formatQualifiedName(cname));
         writeToken(ASEmitterTokens.EQUAL);
         write(ASEmitterTokens.FUNCTION);
@@ -2782,7 +3034,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
         MXMLDescriptorSpecifier setProp = new MXMLDescriptorSpecifier();
         setProp.isProperty = false;
-        setProp.name = formatQualifiedName(nameToString(overrideName));
+        setProp.name = nameToString(overrideName);
         setProp.parent = currentInstance;
         currentInstance.propertySpecifiers.add(setProp);
 
@@ -2866,7 +3118,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
         MXMLDescriptorSpecifier setEvent = new MXMLDescriptorSpecifier();
         setEvent.isProperty = false;
-        setEvent.name = formatQualifiedName(nameToString(eventOverride));
+        setEvent.name = nameToString(eventOverride);
         setEvent.parent = currentInstance;
         currentInstance.propertySpecifiers.add(setEvent);
         // Set its 'target' property to the id of the object
@@ -2947,7 +3199,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
         MXMLDescriptorSpecifier addItems = new MXMLDescriptorSpecifier();
         addItems.isProperty = false;
-        addItems.name = formatQualifiedName(nameToString(instanceOverrideName));
+        addItems.name = nameToString(instanceOverrideName);
         addItems.parent = currentInstance;
         currentInstance.propertySpecifiers.add(addItems);
         MXMLDescriptorSpecifier itemsDescIndex = new MXMLDescriptorSpecifier();
@@ -3675,10 +3927,11 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
         for (MXMLDescriptorSpecifier instance : allInstances)
         {
             String name = instance.name;
-            if (writtenInstances.indexOf(name) == -1)
+            String formatted = formatQualifiedName(name);
+            if (writtenInstances.indexOf(formatted) == -1)
             {
                 emitHeaderLine(name);
-                writtenInstances.add(name);
+                writtenInstances.add(formatted);
             }
         }
         ASProjectScope projectScope = (ASProjectScope) project.getScope();
@@ -3739,7 +3992,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
                 if (NativeUtils.isNative(imp))
                     continue;
 
-                String formatted = formatQualifiedName(imp, false);
+                String formatted = formatQualifiedName(imp);
                 if (writtenInstances.indexOf(formatted) == -1)
                 {
                     emitHeaderLine(imp);
@@ -3759,10 +4012,11 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
             {
             	if (((RoyaleJSProject)project).needLanguage)
                 {
-                    String formatted = JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken();
+                    String languageQname = JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken();
+                    String formatted = formatQualifiedName(languageQname);
                     if (writtenInstances.indexOf(formatted) == -1)
                     {
-            		    emitHeaderLine(JSRoyaleEmitterTokens.LANGUAGE_QNAME.getToken());
+                        emitHeaderLine(languageQname);
                         writtenInstances.add(formatted);
                     }
                 }
@@ -3780,25 +4034,203 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 
     private void emitHeaderLine(String qname, boolean isProvide)
     {
-        write((isProvide) ? JSGoogEmitterTokens.GOOG_PROVIDE
-                : JSGoogEmitterTokens.GOOG_REQUIRE);
-        write(ASEmitterTokens.PAREN_OPEN);
-        write(ASEmitterTokens.SINGLE_QUOTE);
-        write(formatQualifiedName(qname, false));
-        write(ASEmitterTokens.SINGLE_QUOTE);
-        write(ASEmitterTokens.PAREN_CLOSE);
-        writeNewline(ASEmitterTokens.SEMICOLON);
+        // goog modules always use goog.require
+        if (!isProvide && qname.startsWith("goog."))
+        {
+            if (!JSModuleType.GOOG.equals(jsModuleType))
+            {
+                writeToken(ASEmitterTokens.CONST);
+                writeToken(formatQualifiedName(qname, false));
+                writeToken(ASEmitterTokens.EQUAL);
+            }
+            write(JSGoogEmitterTokens.GOOG_REQUIRE);
+            write(ASEmitterTokens.PAREN_OPEN);
+            write(ASEmitterTokens.SINGLE_QUOTE);
+            write(formatQualifiedName(qname, false));
+            write(ASEmitterTokens.SINGLE_QUOTE);
+            write(ASEmitterTokens.PAREN_CLOSE);
+            writeNewline(ASEmitterTokens.SEMICOLON);
+            return;
+        }
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                /* goog.provide('x');\n or goog.require('x');\n */
+                write((isProvide) ? JSGoogEmitterTokens.GOOG_PROVIDE
+                        : JSGoogEmitterTokens.GOOG_REQUIRE);
+                write(ASEmitterTokens.PAREN_OPEN);
+                write(ASEmitterTokens.SINGLE_QUOTE);
+                write(formatQualifiedName(qname, false));
+                write(ASEmitterTokens.SINGLE_QUOTE);
+                write(ASEmitterTokens.PAREN_CLOSE);
+                writeNewline(ASEmitterTokens.SEMICOLON);
+                break;
+            }
+            case ESM:
+            {
+                if (isProvide)
+                {
+                    // do nothing
+                }
+                else
+                {
+                    /* import x from 'a/b/c';\n */
+                    String[] impParts = qname.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classDefinition.getQualifiedName().split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    writeToken(ASEmitterTokens.IMPORT);
+                    writeToken(formatQualifiedName(qname, false));
+                    writeToken(JSEmitterTokens.FROM);
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    if (!relativePath.startsWith("."))
+                    {
+                        write("./");
+                    }
+                    write(relativePath);
+                    write(".js");
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                }
+                break;
+            }
+            case COMMONJS:
+            {
+                if (!isProvide)
+                {
+                    /* const x = require('a/b/c');\n */
+                    String[] impParts = qname.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classDefinition.getQualifiedName().split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    writeToken(ASEmitterTokens.CONST);
+                    writeToken(formatQualifiedName(qname, false));
+                    writeToken(ASEmitterTokens.EQUAL);
+                    write(NodeEmitterTokens.REQUIRE);
+                    write(ASEmitterTokens.PAREN_OPEN);
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    if (!relativePath.startsWith("."))
+                    {
+                        write("./");
+                    }
+                    write(relativePath);
+                    write(".js");
+                    write(ASEmitterTokens.SINGLE_QUOTE);
+                    write(ASEmitterTokens.PAREN_CLOSE);
+                    writeNewline(ASEmitterTokens.SEMICOLON);
+                }
+                break;
+            }
+        }
     }
 
     private String createRequireLine(String qname, boolean isProvide) {
         StringBuilder createHeader = new StringBuilder();
-        createHeader.append(isProvide ? JSGoogEmitterTokens.GOOG_PROVIDE.getToken() : JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
-        createHeader.append(ASEmitterTokens.PAREN_OPEN.getToken());
-        createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
-        createHeader.append(qname);
-        createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
-        createHeader.append(ASEmitterTokens.PAREN_CLOSE.getToken());
-        createHeader.append(ASEmitterTokens.SEMICOLON.getToken());
+        // goog modules always use goog.require
+        if (!isProvide && qname.startsWith("goog."))
+        {
+            createHeader.append(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+            createHeader.append(ASEmitterTokens.PAREN_OPEN.getToken());
+            createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+            createHeader.append(qname);
+            createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+            createHeader.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+            createHeader.append(ASEmitterTokens.SEMICOLON.getToken());
+            return createHeader.toString();
+        }
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                // goog.provide('x'); or goog.require('x');
+                createHeader.append(isProvide ? JSGoogEmitterTokens.GOOG_PROVIDE.getToken() : JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+                createHeader.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                createHeader.append(qname);
+                createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                createHeader.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                createHeader.append(ASEmitterTokens.SEMICOLON.getToken());
+                break;
+            }
+            case ESM:
+            {
+                if (!isProvide)
+                {
+                    /* import x from 'a/b/c'; */
+                    String[] impParts = qname.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classDefinition.getQualifiedName().split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    createHeader.append(ASEmitterTokens.IMPORT.getToken());
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(formatQualifiedName(qname, false));
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(JSEmitterTokens.FROM.getToken());
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        createHeader.append("./");
+                    }
+                    createHeader.append(relativePath);
+                    createHeader.append(".js");
+                    createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    createHeader.append(ASEmitterTokens.SEMICOLON.getToken());
+                }
+                break;
+            }
+            case COMMONJS:
+            {
+                if (!isProvide)
+                {
+                    /* const x = require('a/b/c'); */
+                    String[] impParts = qname.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classDefinition.getQualifiedName().split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    createHeader.append(ASEmitterTokens.CONST.getToken());
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(formatQualifiedName(qname, false));
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(ASEmitterTokens.EQUAL.getToken());
+                    createHeader.append(ASEmitterTokens.SPACE.getToken());
+                    createHeader.append(NodeEmitterTokens.REQUIRE.getToken());
+                    createHeader.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                    createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        createHeader.append("./");
+                    }
+                    createHeader.append(relativePath);
+                    createHeader.append(".js");
+                    createHeader.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    createHeader.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                    createHeader.append(ASEmitterTokens.SEMICOLON.getToken());
+                }
+                break;
+            }
+        }
         return createHeader.toString();
     }
 
@@ -3902,6 +4334,10 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
         if (useName && isGoogProvided(name))
         {
             usedNames.add(name);
+        }
+        if (!JSModuleType.GOOG.equals(jsModuleType) && !name.startsWith("goog.") && !name.startsWith("Vector.<"))
+        {
+            name = name.replaceAll("\\.", Matcher.quoteReplacement("$_$"));
         }
      	return name;
     }
@@ -4672,7 +5108,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 			        	currentInstance.propertySpecifiers.add(propertySpecifier);
 			        objectSpecifier = new MXMLDescriptorSpecifier();
 			        objectSpecifier.isProperty = false;
-			        objectSpecifier.name = formatQualifiedName(IASLanguageConstants.Object);
+			        objectSpecifier.name = IASLanguageConstants.Object;
 			        objectSpecifier.parent = propertySpecifier;
 			        propertySpecifier.propertySpecifiers.add(objectSpecifier);
 			        instances.add(objectSpecifier);
@@ -4789,7 +5225,7 @@ public class MXMLRoyaleEmitter extends MXMLEmitter implements
 			        	currentInstance.propertySpecifiers.add(propertySpecifier);
 			        objectSpecifier = new MXMLDescriptorSpecifier();
 			        objectSpecifier.isProperty = false;
-			        objectSpecifier.name = formatQualifiedName(IASLanguageConstants.Object);
+			        objectSpecifier.name = IASLanguageConstants.Object;
 			        objectSpecifier.parent = propertySpecifier;
 			        propertySpecifier.propertySpecifiers.add(objectSpecifier);
 			        instances.add(objectSpecifier);

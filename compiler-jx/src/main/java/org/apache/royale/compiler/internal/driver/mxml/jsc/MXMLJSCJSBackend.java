@@ -48,6 +48,7 @@ import org.apache.royale.compiler.targets.ITargetProgressMonitor;
 import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.tree.mxml.IMXMLFileNode;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.compiler.visitor.IBlockVisitor;
 import org.apache.royale.compiler.visitor.IBlockWalker;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
@@ -60,6 +61,15 @@ import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
  */
 public class MXMLJSCJSBackend extends MXMLRoyaleBackend
 {
+    public MXMLJSCJSBackend()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public MXMLJSCJSBackend(JSModuleType jsModuleType)
+    {
+        super(jsModuleType);
+    }
 
     @Override
     public Configurator createConfigurator()
@@ -70,7 +80,7 @@ public class MXMLJSCJSBackend extends MXMLRoyaleBackend
     @Override
     public IMXMLEmitter createMXMLEmitter(FilterWriter out)
     {
-        return new MXMLJSCJSEmitter(out);
+        return new MXMLJSCJSEmitter(out, jsModuleType);
     }
 
     @Override
@@ -100,7 +110,7 @@ public class MXMLJSCJSBackend extends MXMLRoyaleBackend
     @Override
     public IJSEmitter createEmitter(FilterWriter out)
     {
-        IJSEmitter emitter = new JSCJSEmitter(out);
+        IJSEmitter emitter = new JSCJSEmitter(out, jsModuleType);
         emitter.setDocEmitter(createDocEmitter(emitter));
         return emitter;
     }

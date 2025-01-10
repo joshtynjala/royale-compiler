@@ -49,6 +49,7 @@ import org.apache.royale.compiler.projects.IRoyaleProject;
 import org.apache.royale.compiler.tree.ASTNodeID;
 import org.apache.royale.compiler.tree.as.*;
 import org.apache.royale.compiler.tree.mxml.*;
+import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.utils.NativeUtils;
 import org.apache.royale.compiler.visitor.mxml.IMXMLBlockWalker;
 
@@ -104,7 +105,7 @@ public class MXMLRoyaleASDocEmitter extends MXMLEmitter implements
     }
 
     @Override
-    public String postProcess(String output)
+    public String postProcess(String output, ICompilationUnit cu)
     {
     	return output;
     }

@@ -26,6 +26,7 @@ import org.apache.royale.compiler.internal.codegen.js.goog.JSGoogEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.mxml.MXMLSubEmitter;
 import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLDescriptorSpecifier;
 import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLEventSpecifier;
+import org.apache.royale.compiler.internal.codegen.mxml.royale.MXMLRoyaleEmitter;
 import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
 
 public class JSRoyaleBasicMXMLDescriptorEmitter extends MXMLSubEmitter implements ISubEmitter<MXMLDescriptorSpecifier>
@@ -234,7 +235,7 @@ public class JSRoyaleBasicMXMLDescriptorEmitter extends MXMLSubEmitter implement
         }
         else
         {
-            write(specifier.name);
+            write(((MXMLRoyaleEmitter)getEmitter()).formatQualifiedName(specifier.name));
         }
         writeDelimiter(writeNewline);
 

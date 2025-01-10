@@ -35,6 +35,9 @@ import org.apache.royale.compiler.config.Configuration;
 import org.apache.royale.compiler.css.ICSSPropertyValue;
 import org.apache.royale.compiler.definitions.IClassDefinition;
 import org.apache.royale.compiler.definitions.IDefinition;
+import org.apache.royale.compiler.definitions.IFunctionDefinition;
+import org.apache.royale.compiler.definitions.IParameterDefinition;
+import org.apache.royale.compiler.definitions.IFunctionDefinition.FunctionClassification;
 import org.apache.royale.compiler.definitions.metadata.IMetaTag;
 import org.apache.royale.compiler.definitions.metadata.IMetaTagAttribute;
 import org.apache.royale.compiler.filespecs.IFileSpecification;
@@ -57,6 +60,7 @@ import org.apache.royale.compiler.problems.JSIncludeMetaTagNoSourceAttributeProb
 import org.apache.royale.compiler.problems.JSIncludeMetaTagUnknownAttributeProblem;
 import org.apache.royale.compiler.units.ICompilationUnit;
 import org.apache.royale.compiler.utils.JSClosureCompilerWrapper;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.swc.ISWC;
 import org.apache.royale.swc.ISWCFileEntry;
 import org.apache.royale.swc.ISWCManager;
@@ -100,8 +104,14 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
 
     public MXMLRoyalePublisher(RoyaleJSProject project, Configuration config)
     {
+        this(project, config, JSModuleType.GOOG);
+    }
+
+    public MXMLRoyalePublisher(RoyaleJSProject project, Configuration config, JSModuleType jsModuleType)
+    {
         super(project, config);
         googConfiguration = (JSGoogConfiguration) config;
+        this.jsModuleType = jsModuleType;
 
         this.isMarmotinniRun = googConfiguration.getMarmotinni() != null;
         this.outputPathParameter = configuration.getOutput();
@@ -112,6 +122,7 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
     }
 
     protected JSGoogConfiguration googConfiguration;
+    protected JSModuleType jsModuleType;
 
     private boolean isMarmotinniRun;
     private String outputPathParameter;
@@ -126,7 +137,7 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
     										JSGoogConfiguration googConfiguration, 
     										List<ISWC> swcs)
     {
-    	return new GoogDepsWriter(intermediateDir, mainClassQName, googConfiguration, swcs);
+    	return new GoogDepsWriter(intermediateDir, mainClassQName, googConfiguration, swcs, jsModuleType);
     }
 
     @Override
@@ -420,6 +431,7 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
         if (configuration.release())
         {
             compilerWrapper = new JSClosureCompilerWrapper(googConfiguration.getJSCompilerOptions());
+            compilerWrapper.setJSModuleType(jsModuleType);
             compilerWrapper.setPropertyNamesToKeep(closurePropertyNamesToKeep);
             if (closureSymbolNamesToExport == null) {
                 closureSymbolNamesToExport = new HashSet<String>();
@@ -534,6 +546,11 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
             collectFileAdditionalHTML(file);
         }
         additionalHTML.addAll(gdw.additionalHTML);
+
+        if (!JSModuleType.GOOG.equals(jsModuleType))
+        {
+            copyJSFromSWCs(allswcs);
+        }
 
         /////////////////////////////////////////////////////////////////////////////////
         // Generate the index.html for loading the application.
@@ -967,7 +984,7 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
 		addHTML.append(getTemplateDependencies(type, projectName, mainClassQName, deps, problems));
         result = result.replaceAll("\\$\\{head\\}", safeReplacement(addHTML.toString()));
 
-        String templateBody = getTemplateBody("release".equals(type) ? projectName : mainClassQName);
+        String templateBody = getTemplateBody(type, "release".equals(type) ? projectName : mainClassQName);
         result = result.replaceAll("\\$\\{body\\}", safeReplacement(templateBody));
 
 		writeFile(new File(targetDir, htmlOutputFileName), result, false);
@@ -1345,34 +1362,174 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
             handleJSIncludeScript(type, new File(script), depsHTML, null, problems);
         }
 
-        if ("intermediate".equals(type))
+        switch (jsModuleType)
         {
-            depsHTML.append("\t<script type=\"text/javascript\" src=\"./library/closure/goog/base.js\"></script>\n");
-            depsHTML.append("\t<script type=\"text/javascript\">\n");
-            depsHTML.append(deps);
-            depsHTML.append("\t\tgoog.require(\"");
-            depsHTML.append(mainClassQName);
-            depsHTML.append("\");\n");
-            depsHTML.append("\t</script>\n");
-        }
-        else
-        {
-            depsHTML.append("\t<script type=\"text/javascript\" src=\"./");
-            depsHTML.append(projectName);
-            depsHTML.append(".js\"></script>\n");
+            case GOOG:
+            {
+                if ("intermediate".equals(type))
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./library/closure/goog/base.js\"></script>\n");
+                    depsHTML.append("\t<script type=\"text/javascript\">\n");
+                    depsHTML.append(deps);
+                    depsHTML.append("\t\tgoog.require(\"");
+                    depsHTML.append(mainClassQName);
+                    depsHTML.append("\");\n");
+                    depsHTML.append("\t</script>\n");
+                }
+                else
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./");
+                    depsHTML.append(projectName);
+                    depsHTML.append(".js\"></script>\n");
+                }
+                break;
+            }
+            case ESM:
+            {
+                if ("intermediate".equals(type))
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./library/closure/goog/base.js\"></script>\n");
+                    depsHTML.append("\t<script type=\"text/javascript\">\n");
+                    depsHTML.append(deps);
+                    depsHTML.append("\t</script>\n");
+                }
+                else
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./");
+                    depsHTML.append(projectName);
+                    depsHTML.append(".js\"></script>\n");
+                }
+                break;
+            }
+            case COMMONJS:
+            {
+                if ("intermediate".equals(type))
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./library/closure/goog/base.js\"></script>\n");
+                    depsHTML.append("\t<script type=\"text/javascript\">\n");
+                    depsHTML.append(deps);
+                    depsHTML.append("\t</script>\n");
+                }
+                else
+                {
+                    depsHTML.append("\t<script type=\"text/javascript\" src=\"./");
+                    depsHTML.append(projectName);
+                    depsHTML.append(".js\"></script>\n");
+                }
+                break;
+            }
         }
         return depsHTML.toString();
     }
 
-	protected String getTemplateBody(String mainClassQName)
+    protected boolean hasStartMethod(IClassDefinition classDef)
     {
+        if (classDef == null)
+        {
+            // backwards compatibility: assume yes
+            return true;
+        }
+        IClassDefinition currentClassDef = classDef;
+        while (currentClassDef != null)
+        {
+            for (IDefinition localDef : currentClassDef.getContainedScope().getAllLocalDefinitions())
+            {
+                if (localDef instanceof IFunctionDefinition && localDef.isPublic() && "start".equals(localDef.getBaseName()))
+                {
+                    IFunctionDefinition funcDef = (IFunctionDefinition) localDef;
+                    
+                    if (FunctionClassification.CLASS_MEMBER.equals(funcDef.getFunctionClassification()) && !funcDef.isStatic())
+                    {
+                        IParameterDefinition[] params = funcDef.getParameters();
+                        if (params.length > 0)
+                        {
+                            IParameterDefinition param = params[0];
+                            // ensure that all parameters are optional
+                            return param.hasDefaultValue() || param.isRest();
+                        }
+                        else
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            currentClassDef = currentClassDef.resolveBaseClass(project);
+        }
+        return false;
+    }
+
+	protected String getTemplateBody(String type, String mainClassQName)
+    {
+        IClassDefinition mainClassDef = null;
+        DefinitionPromise cpromise = (DefinitionPromise) project.mainCU.getDefinitionPromises().get(0);
+        IDefinition actualDef = cpromise.getActualDefinition();
+        if (actualDef instanceof IClassDefinition) {
+            mainClassDef = (IClassDefinition) actualDef;
+        }
         StringBuilder bodyHTML = new StringBuilder();
-        bodyHTML.append("\t<script type=\"text/javascript\">\n");
-        bodyHTML.append("\t\tnew ");
-        bodyHTML.append(mainClassQName);
-        bodyHTML.append("()");
-        bodyHTML.append(".start();\n");
-        bodyHTML.append("\t</script>\n");
+        switch (jsModuleType)
+        {
+            case GOOG:
+            {
+                bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                bodyHTML.append("\t\tnew ");
+                bodyHTML.append(mainClassQName);
+                bodyHTML.append("()");
+                if (hasStartMethod(mainClassDef))
+                {
+                    bodyHTML.append(".start()");
+                }
+                bodyHTML.append(";\n\t</script>\n");
+                break;
+            }
+            case ESM:
+            {
+                if ("intermediate".equals(type))
+                {
+                    bodyHTML.append("\t<script type=\"module\">\n");
+                    bodyHTML.append("\t\timport ");
+                    bodyHTML.append(mainClassQName.replaceAll("\\.", "_"));
+                    bodyHTML.append(" from \"./");
+                    bodyHTML.append(String.join("/", mainClassQName.split("\\.")));
+                    bodyHTML.append(".js\";\n");
+                    bodyHTML.append("\t\tnew ");
+                    bodyHTML.append(mainClassQName);
+                    bodyHTML.append("()");
+                    if (hasStartMethod(mainClassDef))
+                    {
+                        bodyHTML.append(".start()");
+                    }
+                    bodyHTML.append(";\n\t</script>\n");
+                }
+                else
+                {
+                    bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                    bodyHTML.append("\t\tnew ");
+                    bodyHTML.append(mainClassQName);
+                    bodyHTML.append("()");
+                    if (hasStartMethod(mainClassDef))
+                    {
+                        bodyHTML.append(".start()");
+                    }
+                    bodyHTML.append(";\n\t</script>\n");
+                }
+                break;
+            }
+            case COMMONJS:
+            {
+                bodyHTML.append("\t<script type=\"text/javascript\">\n");
+                bodyHTML.append("\t\tnew ");
+                bodyHTML.append(mainClassQName);
+                bodyHTML.append("()");
+                if (hasStartMethod(mainClassDef))
+                {
+                    bodyHTML.append(".start()");
+                }
+                bodyHTML.append(";\n\t</script>\n");
+                break;
+            }
+        }
         return bodyHTML.toString();
     }
 
@@ -1425,7 +1582,7 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
         htmlFile.append("</head>\n");
         htmlFile.append("<body>\n");
 
-        htmlFile.append(getTemplateBody(mainClassQName));
+        htmlFile.append(getTemplateBody(type, mainClassQName));
 
         htmlFile.append("</body>\n");
         htmlFile.append("</html>");
@@ -1678,5 +1835,80 @@ public class MXMLRoyalePublisher extends JSPublisher implements IJSRoyalePublish
         }
 
         return sourceFiles;
+    }
+
+    private void copyJSFromSWCs(List<ISWC> swcs)
+    {
+        for (ISWC swc : swcs)
+        {
+            for (ISWCFileEntry swcFileEntry : swc.getFiles().values())
+            {
+                switch (jsModuleType)
+                {
+                    case GOOG:
+                    {
+                        // do nothing
+                        break;
+                    }
+                    case ESM:
+                    {
+                        String swcFilePath = swcFileEntry.getPath();
+                        if ((swcFilePath.startsWith("js/esm-out/") || swcFilePath.startsWith("js\\esm-out\\")) && swcFilePath.endsWith(".js"))
+                        {
+                            String destPath = swcFilePath.substring(11).replace('\\', '/');
+                            File destFile = new File(outputFolder, destPath);
+                            try
+                            {
+                                InputStream inStream = swcFileEntry.createInputStream();
+                                OutputStream outStream = FileUtils.openOutputStream(destFile);
+                                byte[] b = new byte[1024 * 1024];
+                                int bytes_read;
+                                while ((bytes_read = inStream.read(b)) != -1)
+                                {
+                                    outStream.write(b, 0, bytes_read);
+                                }
+                                outStream.flush();
+                                outStream.close();    					
+                                inStream.close();
+                            }
+                            catch (IOException e)
+                            {
+                                System.out.println("Error copying file from SWC: " + swcFilePath);
+                            }
+                        }
+                        break;
+                    }
+                    case COMMONJS:
+                    {
+                        String swcFilePath = swcFileEntry.getPath();
+                        if ((swcFilePath.startsWith("js/cjs-out/") || swcFilePath.startsWith("js\\cjs-out\\")) && swcFilePath.endsWith(".js"))
+                        {
+                            String destPath = swcFilePath.substring(11).replace('\\', '/');
+                            File destFile = new File(outputFolder, destPath);
+                            try
+                            {
+                                InputStream inStream = swcFileEntry.createInputStream();
+                                OutputStream outStream = FileUtils.openOutputStream(destFile);
+                                byte[] b = new byte[1024 * 1024];
+                                int bytes_read;
+                                while ((bytes_read = inStream.read(b)) != -1)
+                                {
+                                    outStream.write(b, 0, bytes_read);
+                                }
+                                outStream.flush();
+                                outStream.close();    					
+                                inStream.close();
+                            }
+                            catch (IOException e)
+                            {
+                                System.out.println("Error copying file from SWC: " + swcFilePath);
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                }
+            }
+        }
     }
 }

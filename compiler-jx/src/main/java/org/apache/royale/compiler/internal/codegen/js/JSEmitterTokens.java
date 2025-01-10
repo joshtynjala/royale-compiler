@@ -32,7 +32,9 @@ public enum JSEmitterTokens implements IEmitterTokens
     INTERFACE("interface"),
     PROTOTYPE("prototype"),
     SLICE("slice"),
-    ARRAY("Array");
+    ARRAY("Array"),
+    EXPORT("export"),
+    FROM("from");
 
     private String token;
 

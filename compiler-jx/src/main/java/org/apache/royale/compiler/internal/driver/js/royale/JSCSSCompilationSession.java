@@ -18,10 +18,15 @@
  */
 package org.apache.royale.compiler.internal.driver.js.royale;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
 
 import org.apache.royale.compiler.constants.IASLanguageConstants;
 import org.apache.royale.compiler.css.ConditionType;
@@ -33,9 +38,13 @@ import org.apache.royale.compiler.css.ICSSPropertyValue;
 import org.apache.royale.compiler.css.ICSSRule;
 import org.apache.royale.compiler.css.ICSSSelector;
 import org.apache.royale.compiler.css.ICSSSelectorCondition;
+import org.apache.royale.compiler.internal.codegen.as.ASEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.JSEmitterTokens;
 import org.apache.royale.compiler.internal.codegen.js.goog.JSGoogEmitterTokens;
+import org.apache.royale.compiler.internal.codegen.js.node.NodeEmitterTokens;
 import org.apache.royale.compiler.internal.css.*;
 import org.apache.royale.compiler.internal.css.codegen.CSSCompilationSession;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
@@ -85,6 +94,38 @@ public class JSCSSCompilationSession extends CSSCompilationSession
     //  "opacity",
 
     private ArrayList<String> requires;
+    private JSModuleType jsModuleType;
+    private String classQname;
+
+    public JSCSSCompilationSession()
+    {
+        this(JSModuleType.GOOG);
+    }
+
+    public JSCSSCompilationSession(JSModuleType jsModuleType)
+    {
+        this.jsModuleType = jsModuleType;
+    }
+
+    public JSModuleType getJSModuleType()
+    {
+        return jsModuleType;
+    }
+
+    public void setJSModuleType(JSModuleType jsModuleType)
+    {
+        this.jsModuleType = jsModuleType;
+    }
+
+    public String getClassQName()
+    {
+        return classQname;
+    }
+
+    public void setClassQName(String classQname)
+    {
+        this.classQname = classQname;
+    }
     
     public String getEncodedCSS()
     {
@@ -95,9 +136,90 @@ public class JSCSSCompilationSession extends CSSCompilationSession
         if (sb.length() == 0)
         	return null;
         sb.append("];\n");
+        Set<String> addedRequires = new HashSet<String>();
         for (String r : requires)
         {
-            sb.append(JSGoogEmitterTokens.GOOG_REQUIRE.getToken() + "('" + formatQualifiedName(r) + "');\n");
+            if (addedRequires.contains(r))
+            {
+                continue;
+            }
+            switch (jsModuleType)
+            {
+                case GOOG:
+                {
+                    /* goog.require('x');\n */
+                    sb.append(JSGoogEmitterTokens.GOOG_REQUIRE.getToken());
+                    sb.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    sb.append(formatQualifiedName(r));
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    sb.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                    sb.append(ASEmitterTokens.SEMICOLON.getToken());
+                    sb.append(ASEmitterTokens.NEW_LINE.getToken());
+                    break;
+                }
+                case ESM:
+                {
+                    /* import x from 'a/b/c';\n */
+                    String[] impParts = r.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classQname.split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    sb.append(ASEmitterTokens.IMPORT.getToken());
+                    sb.append(ASEmitterTokens.SPACE.getToken());
+                    sb.append(formatQualifiedName(r));
+                    sb.append(ASEmitterTokens.SPACE.getToken());
+                    sb.append(JSEmitterTokens.FROM.getToken());
+                    sb.append(ASEmitterTokens.SPACE.getToken());
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        sb.append("./");
+                    }
+                    sb.append(relativePath);
+                    sb.append(".js");
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    sb.append(ASEmitterTokens.SEMICOLON.getToken());
+                    sb.append(ASEmitterTokens.NEW_LINE.getToken());
+                    break;
+                }
+                case COMMONJS:
+                {
+                    /* const x = require('a/b/c');\n */
+                    String[] impParts = r.split("\\.");
+                    Path impPath = Paths.get(".", impParts);
+                    Path cnamePath =  Paths.get(".", classQname.split("\\."));
+                    Path cnameParentPath = cnamePath.getParent();
+                    if (cnameParentPath == null)
+                    {
+                        cnameParentPath = Paths.get(".");
+                    }
+                    String relativePath = cnameParentPath.relativize(impPath).toString();
+                    sb.append(ASEmitterTokens.CONST.getToken());
+                    sb.append(formatQualifiedName(r));
+                    sb.append(ASEmitterTokens.EQUAL.getToken());
+                    sb.append(NodeEmitterTokens.REQUIRE.getToken());
+                    sb.append(ASEmitterTokens.PAREN_OPEN.getToken());
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    if (!relativePath.startsWith("."))
+                    {
+                        sb.append("./");
+                    }
+                    sb.append(relativePath);
+                    sb.append(".js");
+                    sb.append(ASEmitterTokens.SINGLE_QUOTE.getToken());
+                    sb.append(ASEmitterTokens.PAREN_CLOSE.getToken());
+                    sb.append(ASEmitterTokens.SEMICOLON.getToken());
+                    sb.append(ASEmitterTokens.NEW_LINE.getToken());
+                    break;
+                }
+            }
+            addedRequires.add(r);
         }
 
         return sb.toString();        
@@ -710,6 +832,10 @@ public class JSCSSCompilationSession extends CSSCompilationSession
     	}
     	name = name.replaceAll("\\.", "_");
     	*/
+        if (!JSModuleType.GOOG.equals(jsModuleType) && !name.startsWith("goog.") && !name.startsWith("Vector.<"))
+        {
+            name = name.replaceAll("\\.", Matcher.quoteReplacement("$_$"));
+        }
     	return name;
     }
 

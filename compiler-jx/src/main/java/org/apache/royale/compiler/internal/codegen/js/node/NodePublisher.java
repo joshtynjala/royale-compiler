@@ -23,6 +23,7 @@ import org.apache.royale.compiler.clients.problems.ProblemQuery;
 import org.apache.royale.compiler.config.Configuration;
 import org.apache.royale.compiler.internal.codegen.js.jsc.JSCPublisher;
 import org.apache.royale.compiler.internal.projects.RoyaleJSProject;
+import org.apache.royale.compiler.utils.JSModuleType;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +35,12 @@ public class NodePublisher extends JSCPublisher
 
     public NodePublisher(Configuration config, RoyaleJSProject project)
     {
-        super(project, config);
+        this(config, project, JSModuleType.GOOG);
+    }
+
+    public NodePublisher(Configuration config, RoyaleJSProject project, JSModuleType jsModuleType)
+    {
+        super(project, config, jsModuleType);
     }
 
     @Override
@@ -42,29 +48,58 @@ public class NodePublisher extends JSCPublisher
             String deps, ProblemQuery problems)
     {
         StringBuilder depsJS = new StringBuilder();
-        if ("intermediate".equals(type))
+        switch (jsModuleType)
         {
-            depsJS.append("require(\"./library/closure/goog/bootstrap/nodejs\");\n");
-            depsJS.append(deps);
-            depsJS.append("goog.require(\"");
-            depsJS.append(projectName);
-            depsJS.append("\");\n");
-        }
-        else
-        {
-            depsJS.append("var ");
-            depsJS.append(projectName);
-            depsJS.append(" = require(\"./");
-            depsJS.append(projectName);
-            depsJS.append("\").");
-            depsJS.append(projectName);
-            depsJS.append(";\n");
+            case GOOG:
+            {
+                if ("intermediate".equals(type))
+                {
+                    depsJS.append("require(\"./library/closure/goog/bootstrap/nodejs\");\n");
+                    depsJS.append(deps);
+                    depsJS.append("goog.require(\"");
+                    depsJS.append(projectName);
+                    depsJS.append("\");\n");
+                }
+                else
+                {
+                    depsJS.append("var ");
+                    depsJS.append(projectName);
+                    depsJS.append(" = require(\"./");
+                    depsJS.append(projectName);
+                    depsJS.append("\").");
+                    depsJS.append(projectName);
+                    depsJS.append(";\n");
+                }
+                break;
+            }
+            case ESM:
+            {
+                depsJS.append("const ");
+                depsJS.append(projectName);
+                depsJS.append(" = require(\"./");
+                depsJS.append(projectName);
+                depsJS.append("\").");
+                depsJS.append(projectName);
+                depsJS.append(";\n");
+                break;
+            }
+            case COMMONJS:
+            {
+                depsJS.append("const ");
+                depsJS.append(projectName);
+                depsJS.append(" = require(\"./");
+                depsJS.append(projectName);
+                depsJS.append("\").");
+                depsJS.append(projectName);
+                depsJS.append(";\n");
+                break;
+            }
         }
         return depsJS.toString();
     }
 
     @Override
-    protected String getTemplateBody(String mainClassQName)
+	protected String getTemplateBody(String type, String mainClassQName)
     {
         StringBuilder bodyJS = new StringBuilder();
         if (exportModule)
@@ -88,7 +123,7 @@ public class NodePublisher extends JSCPublisher
     {
         StringBuilder contents = new StringBuilder();
         contents.append(getTemplateDependencies(type, projectName, mainClassQName, deps, problems));
-        contents.append(getTemplateBody(mainClassQName));
+        contents.append(getTemplateBody(type, mainClassQName));
         writeFile(new File(targetDir, "index.js"), contents.toString(), false);
     }
 }

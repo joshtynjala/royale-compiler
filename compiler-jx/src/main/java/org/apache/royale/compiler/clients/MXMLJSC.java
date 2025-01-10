@@ -54,6 +54,7 @@ import org.apache.royale.compiler.targets.ITarget;
 import org.apache.royale.compiler.targets.ITarget.TargetType;
 import org.apache.royale.compiler.targets.ITargetSettings;
 import org.apache.royale.compiler.units.ICompilationUnit;
+import org.apache.royale.compiler.utils.JSModuleType;
 import org.apache.royale.swf.ISWF;
 import org.apache.royale.swf.SWF;
 import org.apache.royale.swf.types.RGB;
@@ -91,7 +92,9 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
         //Node.js application
         JS_NODE("JSNode"),
         //Node.js module
-        JS_NODE_MODULE("JSNodeModule");
+        JS_NODE_MODULE("JSNodeModule"),
+        // ECMAScript module
+        JS_ROYALE_MODULE("JSRoyaleModule");
 
         private String text;
 
@@ -281,6 +284,7 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
             		switch (JSTargetType.fromString(target))
 	                {
 	                case SWF:
+                    {
 	                    mxmlc = new MXMLC();
 	                    mxmlc.configurationClass = configurationClass;
 	                    if (noLink)
@@ -293,7 +297,9 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
 	                case JS_ROYALE:
+                    {
 	                	MXMLJSCRoyale royale = new MXMLJSCRoyale();
 	                	lastCompiler = royale;
 	                    result = royale.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -302,7 +308,9 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
 	                case JS_ROYALE_CORDOVA:
+                    {
 	                	MXMLJSCRoyaleCordova royaleCordova = new MXMLJSCRoyaleCordova();
 	                	lastCompiler = royaleCordova;
 	                    result = royaleCordova.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -311,7 +319,20 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
+                    case JS_ROYALE_MODULE:
+                    {
+                        MXMLJSCRoyale royale = new MXMLJSCRoyale(JSModuleType.ESM);
+                        lastCompiler = royale;
+                        result = royale.mainNoExit(removeASArgs(args), problems.getProblems(), false);
+                        if (result != MXMLJSCRoyale.ExitCode.SUCCESS.getCode() && result != MXMLJSCRoyale.ExitCode.WATCHING.getCode())
+                        {
+                            break targetloop;
+                        }
+                        break;
+                    }
 	                case JS_NODE:
+                    {
                         MXMLJSCNode node = new MXMLJSCNode();
                         lastCompiler = node;
                         result = node.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -320,7 +341,9 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
                             break targetloop;
                         }
                         break;
+                    }
                     case JS_NODE_MODULE:
+                    {
                         MXMLJSCNodeModule nodeModule = new MXMLJSCNodeModule();
                         lastCompiler = nodeModule;
                         result = nodeModule.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -329,7 +352,9 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
                             break targetloop;
                         }
                         break;
+                    }
 	                case JS_NATIVE:
+                    {
 	                	MXMLJSCNative jsc = new MXMLJSCNative();
 	                	lastCompiler = jsc;
 	                    result = jsc.mainNoExit(removeASArgs(args), problems.getProblems(), false);
@@ -338,6 +363,7 @@ public class MXMLJSC implements JSCompilerEntryPoint, ProblemQueryProvider,
 	                    	break targetloop;
 	                    }
 	                    break;
+                    }
 	                // if you add a new target here, don't forget to also add it
 	                // to flex2.tools.MxmlJSC in flex-compiler-oem for IDE support
 	                }

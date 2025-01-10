@@ -23,6 +23,7 @@ import org.apache.royale.compiler.codegen.IEmitterTokens;
 public enum NodeEmitterTokens implements IEmitterTokens
 {
     REQUIRE("require"),
+    MODULE("module"),
     EXPORTS("exports");
 
     private String token;
